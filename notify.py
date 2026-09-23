@@ -5,7 +5,7 @@ import requests
 import random
 import string
 
-# Đảm bảo mã hóa UTF-8 cho stdout và stderr để tránh crash trên terminal Windows/không hỗ trợ tiếng Việt
+# Đảm bảo mã hóa UTF-8 cho stdout và stderr
 if hasattr(sys.stdout, 'reconfigure'):
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -48,7 +48,7 @@ def get_progress_text(status):
 def is_available(value):
     if not value:
         return False
-    val_lower = value.strip().lower()
+    val_lower = str(value).strip().lower()
     if val_lower in ["", "chưa rõ", "unknown", "đang xác định...", "⏳ đang quét..."]:
         return False
     return True
@@ -69,12 +69,15 @@ def upload_to_gofile(file_path, token=""):
             return None
         server = servers[0].get("name")
 
-        print(f"Đang upload {file_path} lên server {server}...")
+        print(f"Đang upload {file_path} lên server {server} (Quá trình này có thể mất vài phút)...")
         upload_url = f"https://{server}.gofile.io/contents/uploadfile"
+        
+        # Mở file dưới dạng nhị phân và gửi qua multipart/form-data
         with open(file_path, "rb") as f:
             files = {"file": (os.path.basename(file_path), f)}
             data = {"token": token} if token else {}
             res = requests.post(upload_url, data=data, files=files, timeout=None)
+            
         res.raise_for_status()
         res_json = res.json()
 
@@ -92,51 +95,30 @@ def upload_to_gofile(file_path, token=""):
 
 def build_message(status, rom_link, build_id, builder_name):
     progress_text = get_progress_text(status)
-
-    device_name = read_file_if_exists("bin/ddevice/device_name.txt")
-    if not device_name:
-        device_name = read_file_if_exists("bin/ddevice/name_devices.txt")
-
-    codename = read_file_if_exists("bin/ddevice/device_code.txt")
+    device_name = read_file_if_exists("bin/ddevice/device_name.txt", "Thiết bị Xiaomi")
+    codename = read_file_if_exists("bin/ddevice/device_code.txt").capitalize()
     if not codename:
-        codename = read_file_if_exists("bin/ddevice/device_model.txt")
+        codename = read_file_if_exists("bin/ddevice/device_model.txt").capitalize()
 
     rom_os = read_file_if_exists("bin/ddevice/rom_os.txt")
     if not rom_os:
-        rom_os = read_file_if_exists("bin/ddevice/brand_os.txt")
-    if not rom_os:
-        rom_os = read_file_if_exists("bin/ddevice/brand.txt")
-    if rom_os in ["OS1", "OS2", "OS3"]:
-        rom_os = "HyperOS"
+        rom_os = "HyperOS" if "OS" in read_file_if_exists("bin/ddevice/rom_version.txt") else "MIUI"
 
-    version_rom = read_file_if_exists("bin/ddevice/rom_version.txt")
-    if not version_rom:
-        version_rom = read_file_if_exists("bin/ddevice/base_rom_code.txt")
-    if not version_rom:
-        version_rom = read_file_if_exists("bin/ddevice/base_build_id.txt")
-
+    version_rom = read_file_if_exists("bin/ddevice/rom_version.txt", "Không rõ bản dựng")
     android_ver = read_file_if_exists("bin/ddevice/androidver.txt")
     sdk_level = read_file_if_exists("bin/ddevice/sdkLevel.txt")
-    version_tool = read_file_if_exists("Version")
-
+    version_tool = read_file_if_exists("Version", "1.0")
     builder_text = builder_name if builder_name else "🤖 Hệ thống"
 
     lines = [
-        "🐧 *TIẾN TRÌNH BUILD ROM*",
+        "👾 <b>TIẾN TRÌNH BUILD ROM</b>",
         "━━━━━━━━━━━━━━━━━━",
-        f"👤 *Người thực hiện:* {builder_text}",
+        f"👤 Người thực hiện: {builder_text}",
+        f"🛠️ Phiên bản: BugOS v{version_tool}",
+        f"📱 Device: {device_name}",
+        f"📍 Codename: {codename}",
+        f"💿 Hệ điều hành: {rom_os} | {version_rom}"
     ]
-
-    if is_available(device_name):
-        lines.append(f"📱 *Device:* `{device_name}`")
-    if is_available(version_tool):
-        lines.append(f"🛠️ *Phiên bản:* `BugOS {version_tool}`")
-    if is_available(codename):
-        lines.append(f"🔑 *Codename:* `{codename}`")
-
-    os_parts = [p for p in [rom_os, version_rom] if is_available(p)]
-    if os_parts:
-        lines.append(f"💿 *Hệ điều hành:* `{'.'.join(os_parts)}`")
 
     android_parts = []
     if is_available(android_ver):
@@ -144,64 +126,54 @@ def build_message(status, rom_link, build_id, builder_name):
     if is_available(sdk_level):
         android_parts.append(f"SDK {sdk_level}")
     if android_parts:
-        lines.append(f"🤖 *Android:* `{' | '.join(android_parts)}`")
+        lines.append(f"🤖 Android: {' | '.join(android_parts)}")
 
     lines.append("━━━━━━━━━━━━━━━━━━")
-    lines.append(f"📈 *Tiến trình:* {progress_text}")
-    lines.append(f"🆔 *Build ID:* `{build_id}`")
-    lines.append(f"🔗 *Base ROM (Nguồn):* [Link]({rom_link})")
+    lines.append(f"📈 Tiến trình: <b>{progress_text}</b>")
+    lines.append(f"🆔 Build ID: {build_id}")
+    lines.append(f"🔗 Base ROM (Nguồn): <a href='{rom_link}'>Link</a>")
 
     return "\n".join(lines)
 
 def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id=None,
                        build_id="Unknown", builder_name="", builder_id="", gofile_link=""):
     is_success = status.lower() == 'success'
-
     message = build_message(status, rom_link, build_id, builder_name)
 
-    # Nút bấm inline: chỉ hiện nút tải ROM khi đã có link gofile.io (thường chỉ có ở trạng thái success)
-    reply_markup = None
+    # Khởi tạo dữ liệu gửi cơ bản (Chuyển sang parse_mode HTML cho giống với giao diện trước đó)
+    payload = {
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+
+    # Nếu có link Gofile, chèn Nút bấm (Inline Keyboard) dưới dạng chuỗi JSON
     if is_available(gofile_link):
-        reply_markup = json.dumps({
+        payload["reply_markup"] = json.dumps({
             "inline_keyboard": [[
-                {"text": "⬇️ Tải ROM", "url": gofile_link}
+                {"text": "⬇️ Tải ROM (Gofile)", "url": gofile_link}
             ]]
         })
 
-    # Thành công -> chỉ gửi lên nhóm/kênh chat (tin nhắn mới, kèm nút tải nếu có).
-    # Các trạng thái khác (start/download/unpack/build/pack/upload/fail) -> chỉ gửi/PM riêng cho builder_id,
-    # và được edit lại trên cùng 1 tin nhắn để theo dõi tiến trình.
+    # Cấu hình đối tượng nhận
     if is_success:
         target_chat_id = channel_id
-        use_msg_id = None  # luôn gửi tin nhắn mới lên nhóm khi thành công
+        use_msg_id = None 
     else:
         target_chat_id = builder_id
         use_msg_id = msg_id
 
     if not is_available(target_chat_id):
-        print(f"Lỗi: Không có chat đích để gửi thông báo cho trạng thái '{status}' (thiếu channel_id hoặc builder_id).")
+        print(f"Lỗi: Không có chat đích để gửi thông báo (thiếu channel_id hoặc builder_id).")
         return
+
+    payload["chat_id"] = target_chat_id
 
     if use_msg_id:
         url = f"https://api.telegram.org/bot{bot_token}/editMessageText"
-        payload = {
-            "chat_id": target_chat_id,
-            "message_id": use_msg_id,
-            "text": message,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": True
-        }
+        payload["message_id"] = use_msg_id
     else:
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        payload = {
-            "chat_id": target_chat_id,
-            "text": message,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": True
-        }
-
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
 
     try:
         response = requests.post(url, json=payload)
@@ -210,11 +182,11 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
 
         new_msg_id = res_data.get('result', {}).get('message_id')
 
-        # Chỉ lưu lại msg_id để edit tiếp cho các bước tiến trình gửi cho builder (không áp dụng cho tin thành công lên nhóm)
+        # Cập nhật msg_id vào biến môi trường nếu là lần tạo tin nhắn tiến trình đầu tiên
         if not is_success and not use_msg_id and new_msg_id and "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_MSG_ID={new_msg_id}\n")
-            print(f"Đã lưu TELEGRAM_MSG_ID={new_msg_id} vào GITHUB_ENV để tự động update tin nhắn.")
+            print(f"Đã lưu TELEGRAM_MSG_ID={new_msg_id} vào GITHUB_ENV.")
 
         print(f"Đã gửi/cập nhật thông báo tới chat {target_chat_id} thành công!")
 
@@ -231,34 +203,23 @@ if __name__ == "__main__":
     status = sys.argv[1]
     repo_name = sys.argv[2]
     rom_link = sys.argv[3]
-
-    # Prefix cho build id (ví dụ: xiaomi, xst, oplus)
     prefix = sys.argv[4] if len(sys.argv) > 4 else "build"
-
-    # Thông tin người build
     builder_name = sys.argv[5] if len(sys.argv) > 5 else ""
     builder_id = sys.argv[6] if len(sys.argv) > 6 else ""
-
-    # Link tải ROM trên gofile.io, nếu đã có sẵn (ví dụ upload ở step khác rồi truyền vào)
-    gofile_link = sys.argv[7] if len(sys.argv) > 7 else os.environ.get("GOFILE_LINK", "")
-
-    # Đường dẫn tới file zip ROM cần upload lên gofile.io (nếu status=success và chưa có gofile_link)
-    rom_zip_path = sys.argv[8] if len(sys.argv) > 8 else os.environ.get("ROM_ZIP_PATH", "")
-
-    # Token tài khoản gofile.io (không bắt buộc, để upload dạng guest thì bỏ trống)
+    
+    # Ưu tiên lấy tham số dòng lệnh thứ 7, nếu trống lấy biến môi trường
+    gofile_link = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else os.environ.get("GOFILE_LINK", "")
+    rom_zip_path = sys.argv[8] if len(sys.argv) > 8 and sys.argv[8] else os.environ.get("ROM_ZIP_PATH", "")
     gofile_token = os.environ.get("GOFILE_TOKEN", "")
 
-    # Lấy token, channel ID, message ID và Build ID từ biến môi trường
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     channel_id = os.environ.get("TELEGRAM_CHANNEL_ID")
     msg_id = os.environ.get("TELEGRAM_MSG_ID")
     build_id = os.environ.get("TELEGRAM_BUILD_ID")
 
-    # Tạo Build ID mới nếu chưa có
     if not build_id:
         random_digits = ''.join(random.choices(string.digits, k=8))
         build_id = f"{prefix}_{random_digits}"
-
         if "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_BUILD_ID={build_id}\n")
@@ -267,7 +228,7 @@ if __name__ == "__main__":
         print("Lỗi: Thiếu TELEGRAM_BOT_TOKEN trong biến môi trường.")
         sys.exit(1)
 
-    # Nếu build thành công, chưa có sẵn gofile_link, nhưng có đường dẫn file zip -> tự upload lên gofile.io
+    # Thực hiện Upload nếu thành công và có file nhưng chưa có link Gofile
     if status.lower() == 'success' and not is_available(gofile_link) and rom_zip_path:
         uploaded_link = upload_to_gofile(rom_zip_path, gofile_token)
         if uploaded_link:
@@ -276,5 +237,4 @@ if __name__ == "__main__":
                 with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                     f.write(f"GOFILE_LINK={uploaded_link}\n")
 
-    send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id,
-                       build_id, builder_name, builder_id, gofile_link)
+    send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id, build_id, builder_name, builder_id, gofile_link)

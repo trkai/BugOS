@@ -12,14 +12,38 @@ patch "Patching PowerKeeper"
 mkdir -p $work_dir/apk_temp
 isPowerKeeperDIR=$(find "$MAIN_FOLDER" -type d -name "PowerKeeper")
 isPowerKeeper=$(find "$MAIN_FOLDER" -type f -name "PowerKeeper.apk")
+
+if [ -z "$isPowerKeeper" ]; then
+    warn "PowerKeeper.apk not found in this ROM, skipping PowerKeeper patch."
+    rm -rf $work_dir/apk_temp
+    patch "Done"
+    exit 0
+fi
+
 $APKEDITOR d -t raw -f -no-dex-debug -i $isPowerKeeper -o $work_dir/apk_temp/isPowerKeeper.apk.out >/dev/null 2>&1
+
+if [ ! -d "$work_dir/apk_temp/isPowerKeeper.apk.out" ]; then
+    warn "Failed to decompile PowerKeeper.apk, skipping patch."
+    rm -rf $work_dir/apk_temp
+    patch "Done"
+    exit 0
+fi
+
 Smali1=$(find "$work_dir/apk_temp/isPowerKeeper.apk.out" -type f -name MilletConfig.smali)
 Smali2=$(find "$work_dir/apk_temp/isPowerKeeper.apk.out" -type f -name GmsObserver.smali)
 tar1="$work_dir/bin/package/NOTIFICATION_FIX/A16/patch/gms.ini"
 
-sed -i 's/Lmiui\/os\/Build;->IS_INTERNATIONAL_BUILD:Z/Lmiui\/os\/Build;->IS_MIUI:Z/g' $Smali1
+if [ -n "$Smali1" ]; then
+    sed -i 's/Lmiui\/os\/Build;->IS_INTERNATIONAL_BUILD:Z/Lmiui\/os\/Build;->IS_MIUI:Z/g' $Smali1
+else
+    warn "MilletConfig.smali not found in PowerKeeper.apk, skipping this sub-patch."
+fi
 
-$repS $tar1 $Smali2
+if [ -n "$Smali2" ]; then
+    $repS $tar1 $Smali2
+else
+    warn "GmsObserver.smali not found in PowerKeeper.apk, skipping this sub-patch."
+fi
 
 #Finishing
 PowerKeeper=$(basename $isPowerKeeper)

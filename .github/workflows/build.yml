@@ -1,4 +1,4 @@
-name: PenguinOS ROM Build
+name: BugOS ROM Build
 
 on:
   workflow_dispatch:
@@ -6,9 +6,6 @@ on:
       input_url:
         description: 'URL of the ROM to build'
         required: true
-      builder_name:
-        description: 'Tên người build'
-        required: false
 
 jobs:
   Initialize:
@@ -17,6 +14,8 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
       GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
+      BUILDER_NAME: "iabi"
+      BUILDER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -51,7 +50,7 @@ jobs:
       - name: Start Notify
         run: |
           pip install requests
-          python notify.py start "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
+          python notify.py start "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
 
       - name: Set up Time
         run: |
@@ -76,18 +75,18 @@ jobs:
         env:
           INPUT_URL: ${{ inputs.input_url }}
         run: |
-          sudo -E bash build.sh "$INPUT_URL" "${{ github.repository }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
+          sudo -E bash build.sh "$INPUT_URL" "${{ github.repository }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
 
       - name: Pack ROM...
         run: |
-          python notify.py pack "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
+          python notify.py pack "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
           sudo bash packROM.sh
 
       # uploadROM.sh giờ chỉ đóng gói zip flashable (đã bỏ rclone/Google Drive).
       # notify.py sẽ tự upload file zip này lên gofile.io ở step "Success Notification".
       - name: Upload ROM...
         run: |
-          python notify.py upload "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
+          python notify.py upload "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
           sudo -E bash uploadROM.sh
 
       - name: Success Notification
@@ -95,12 +94,12 @@ jobs:
         run: |
           # output_zip.txt chỉ chứa tên file, file zip thật nằm trong out/
           ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
-          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}" "" "$ROM_ZIP_PATH"
+          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}" "" "$ROM_ZIP_PATH"
 
       - name: Failure Notification
         if: failure()
         run: |
-          python notify.py fail "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
+          python notify.py fail "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
 
       - name: Cleanup
         if: always()

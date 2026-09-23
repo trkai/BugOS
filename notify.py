@@ -27,20 +27,23 @@ def read_file_if_exists(path, default=""):
             return default
     return default
 
-def get_status_line(status):
+def get_progress_text(status):
     status = status.lower()
-    mapping = {
-        'start':    ("⏳", "ĐANG KHỞI TẠO"),
-        'download': ("📥", "ĐANG TẢI VỀ"),
-        'unpack':   ("🔓", "ĐANG GIẢI NÉN"),
-        'build':    ("🛠️", "ĐANG BUILD"),
-        'pack':     ("📦", "ĐANG ĐÓNG GÓI"),
-        'upload':   ("📤", "ĐANG TẢI LÊN"),
-        'success':  ("✅", "THÀNH CÔNG"),
-        'fail':     ("❌", "THẤT BẠI"),
+    percent_map = {
+        'start': 5,
+        'download': 20,
+        'unpack': 35,
+        'build': 55,
+        'pack': 75,
+        'upload': 95,
     }
-    icon, label = mapping.get(status, ("ℹ️", status.upper()))
-    return icon, label
+    if status == 'success':
+        return "✅ Hoàn tất [ 100% ]"
+    if status == 'fail':
+        return "❌ Thất bại"
+    if status in percent_map:
+        return f"[ {percent_map[status]}% ]"
+    return status.upper()
 
 def is_available(value):
     if not value:
@@ -87,18 +90,9 @@ def upload_to_gofile(file_path, token=""):
         print(f"Lỗi khi upload lên gofile.io: {e}")
         return None
 
-def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id=None,
-                       build_id="Unknown", builder_name="", builder_id="", gofile_link=""):
-    icon, status_label = get_status_line(status)
+def build_message(status, rom_link, build_id, builder_name):
+    progress_text = get_progress_text(status)
 
-    # Lấy GITHUB_RUN_ID để tạo link trỏ tới log của Action
-    run_id = os.environ.get("GITHUB_RUN_ID", "")
-    if run_id:
-        action_url = f"https://github.com/{repo_name}/actions/runs/{run_id}"
-    else:
-        action_url = f"https://github.com/{repo_name}/actions"
-
-    # Đọc thông tin thiết bị chi tiết từ các file của BuildTool
     device_name = read_file_if_exists("bin/ddevice/device_name.txt")
     if not device_name:
         device_name = read_file_if_exists("bin/ddevice/name_devices.txt")
@@ -124,26 +118,25 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
     android_ver = read_file_if_exists("bin/ddevice/androidver.txt")
     sdk_level = read_file_if_exists("bin/ddevice/sdkLevel.txt")
     version_tool = read_file_if_exists("Version")
-    output_zip = read_file_if_exists("bin/ddevice/output_zip.txt")
 
     builder_text = builder_name if builder_name else "🤖 Hệ thống"
 
-    message_lines = [
+    lines = [
         "🐧 *TIẾN TRÌNH BUILD ROM*",
         "━━━━━━━━━━━━━━━━━━",
         f"👤 *Người thực hiện:* {builder_text}",
     ]
 
-    if is_available(version_tool):
-        message_lines.append(f"🏷️ *Phiên bản:* `BugOS {version_tool}`")
     if is_available(device_name):
-        message_lines.append(f"📱 *Device:* `{device_name}`")
+        lines.append(f"📱 *Device:* `{device_name}`")
+    if is_available(version_tool):
+        lines.append(f"🛠️ *Phiên bản:* `BugOS {version_tool}`")
     if is_available(codename):
-        message_lines.append(f"🔑 *Codename:* `{codename}`")
+        lines.append(f"🔑 *Codename:* `{codename}`")
 
     os_parts = [p for p in [rom_os, version_rom] if is_available(p)]
     if os_parts:
-        message_lines.append(f"💿 *Hệ điều hành:* `{'.'.join(os_parts)}`")
+        lines.append(f"💿 *Hệ điều hành:* `{'.'.join(os_parts)}`")
 
     android_parts = []
     if is_available(android_ver):
@@ -151,19 +144,22 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
     if is_available(sdk_level):
         android_parts.append(f"SDK {sdk_level}")
     if android_parts:
-        message_lines.append(f"🤖 *Android:* `{' | '.join(android_parts)}`")
+        lines.append(f"🤖 *Android:* `{' | '.join(android_parts)}`")
 
-    message_lines.append("━━━━━━━━━━━━━━━━━━")
-    message_lines.append(f"📶 *Tiến trình:* {status_label} {icon}")
-    if status.lower() == 'success' and is_available(output_zip):
-        message_lines.append(f"📦 *Tên file zip:* `{output_zip}`")
-    message_lines.append(f"🆔 *Build ID:* `{build_id}`")
-    message_lines.append(f"🔗 *Base ROM (Nguồn):* [Link]({rom_link})")
-    message_lines.append(f"📜 *Log build:* [Xem tại đây]({action_url})")
+    lines.append("━━━━━━━━━━━━━━━━━━")
+    lines.append(f"📈 *Tiến trình:* {progress_text}")
+    lines.append(f"🆔 *Build ID:* `{build_id}`")
+    lines.append(f"🔗 *Base ROM (Nguồn):* [Link]({rom_link})")
 
-    message = "\n".join(message_lines)
+    return "\n".join(lines)
 
-    # Nút bấm inline: chỉ hiện nút tải ROM khi đã có link gofile.io (sau khi upload xong)
+def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id=None,
+                       build_id="Unknown", builder_name="", builder_id="", gofile_link=""):
+    is_success = status.lower() == 'success'
+
+    message = build_message(status, rom_link, build_id, builder_name)
+
+    # Nút bấm inline: chỉ hiện nút tải ROM khi đã có link gofile.io (thường chỉ có ở trạng thái success)
     reply_markup = None
     if is_available(gofile_link):
         reply_markup = json.dumps({
@@ -172,21 +168,33 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
             ]]
         })
 
-    if msg_id:
-        # Nếu đã có msg_id, ta sẽ Edit tin nhắn cũ
+    # Thành công -> chỉ gửi lên nhóm/kênh chat (tin nhắn mới, kèm nút tải nếu có).
+    # Các trạng thái khác (start/download/unpack/build/pack/upload/fail) -> chỉ gửi/PM riêng cho builder_id,
+    # và được edit lại trên cùng 1 tin nhắn để theo dõi tiến trình.
+    if is_success:
+        target_chat_id = channel_id
+        use_msg_id = None  # luôn gửi tin nhắn mới lên nhóm khi thành công
+    else:
+        target_chat_id = builder_id
+        use_msg_id = msg_id
+
+    if not is_available(target_chat_id):
+        print(f"Lỗi: Không có chat đích để gửi thông báo cho trạng thái '{status}' (thiếu channel_id hoặc builder_id).")
+        return
+
+    if use_msg_id:
         url = f"https://api.telegram.org/bot{bot_token}/editMessageText"
         payload = {
-            "chat_id": channel_id,
-            "message_id": msg_id,
+            "chat_id": target_chat_id,
+            "message_id": use_msg_id,
             "text": message,
             "parse_mode": "Markdown",
             "disable_web_page_preview": True
         }
     else:
-        # Nếu chưa có, gửi tin nhắn mới
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {
-            "chat_id": channel_id,
+            "chat_id": target_chat_id,
             "text": message,
             "parse_mode": "Markdown",
             "disable_web_page_preview": True
@@ -200,45 +208,15 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         response.raise_for_status()
         res_data = response.json()
 
-        # Lấy message_id của tin nhắn vừa gửi
         new_msg_id = res_data.get('result', {}).get('message_id')
 
-        # Ghi message_id vào biến môi trường của GitHub Actions để các step sau tái sử dụng
-        if not msg_id and new_msg_id and "GITHUB_ENV" in os.environ:
+        # Chỉ lưu lại msg_id để edit tiếp cho các bước tiến trình gửi cho builder (không áp dụng cho tin thành công lên nhóm)
+        if not is_success and not use_msg_id and new_msg_id and "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_MSG_ID={new_msg_id}\n")
             print(f"Đã lưu TELEGRAM_MSG_ID={new_msg_id} vào GITHUB_ENV để tự động update tin nhắn.")
 
-        print("Đã gửi/cập nhật thông báo lên kênh thành công!")
-        # Gửi tin nhắn riêng (PM) cho người build nếu trạng thái là success hoặc fail
-        if status.lower() in ['success', 'fail'] and builder_id:
-            pm_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-
-            if status.lower() == 'success':
-                pm_text = (
-                    f"🎉 *YÊU CẦU BUILD ROM ĐÃ HOÀN TẤT!*\n\n"
-                    f"{message}\n"
-                )
-            else:
-                pm_text = (
-                    f"⚠️ *YÊU CẦU BUILD ROM ĐÃ THẤT BẠI!*\n\n"
-                    f"{message}\n"
-                    f"💡 *Gợi ý:* Hãy bấm vào link Log build ở trên để xem chi tiết lỗi nhé."
-                )
-
-            pm_payload = {
-                "chat_id": builder_id,
-                "text": pm_text,
-                "parse_mode": "Markdown",
-                "disable_web_page_preview": True
-            }
-            if reply_markup:
-                pm_payload["reply_markup"] = reply_markup
-            try:
-                requests.post(pm_url, json=pm_payload)
-                print(f"Đã gửi tin nhắn riêng (PM) cho user {builder_id}")
-            except Exception as e:
-                print(f"Lỗi gửi tin nhắn riêng: {e}")
+        print(f"Đã gửi/cập nhật thông báo tới chat {target_chat_id} thành công!")
 
     except Exception as e:
         print(f"Lỗi khi gửi thông báo: {e}")
@@ -281,13 +259,12 @@ if __name__ == "__main__":
         random_digits = ''.join(random.choices(string.digits, k=8))
         build_id = f"{prefix}_{random_digits}"
 
-        # Lưu vào GITHUB_ENV để dùng cho các step sau
         if "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_BUILD_ID={build_id}\n")
 
-    if not bot_token or not channel_id:
-        print("Lỗi: Thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHANNEL_ID trong biến môi trường.")
+    if not bot_token:
+        print("Lỗi: Thiếu TELEGRAM_BOT_TOKEN trong biến môi trường.")
         sys.exit(1)
 
     # Nếu build thành công, chưa có sẵn gofile_link, nhưng có đường dẫn file zip -> tự upload lên gofile.io

@@ -9,9 +9,6 @@ on:
       builder_name:
         description: 'Tên người build'
         required: false
-      builder_id:
-        description: 'ID người build'
-        required: false
       
 jobs:
   Initialize:

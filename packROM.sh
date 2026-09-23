@@ -45,12 +45,12 @@ for pname in ${super_list}; do
            esac
         else
            case $pname in
-             mi_ext) addSize=100000000 ;;
-             odm) addSize=100000000 ;;
-             system) addSize=100000000 ;;
-             vendor) addSize=100000000 ;;
-             system_ext) addSize=100000000 ;;
-             product) addSize=100000000 ;;
+             mi_ext) addSize=16777216 ;;
+             odm) addSize=16777216 ;;
+             system) addSize=16777216 ;;
+             vendor) addSize=16777216 ;;
+             system_ext) addSize=16777216 ;;
+             product) addSize=16777216 ;;
              *) addSize=8054432 ;;
            esac
         fi
@@ -91,7 +91,7 @@ fi
 # Pack super.img
 if [[ "$is_ab_device" == false ]]; then
     repack "Packing super.img for A-only device"
-    GROUP_SIZE=$((superSize - 268435456))   
+    GROUP_SIZE=$((superSize - 134217728))
     lpargs="-F --output build/baserom/images/super.img --metadata-size 65536 --super-name super --metadata-slots 2 --block-size 4096 --device super:$superSize --group=qti_dynamic_partitions:$GROUP_SIZE"
     
     for pname in odm mi_ext system system_ext product vendor; do
@@ -109,7 +109,7 @@ if [[ "$is_ab_device" == false ]]; then
 else
     repack "Packing super.img for V-AB device"
     
-    GROUP_SIZE=$((superSize - 268435456))   # 256MB margin - Fix for error -22
+    GROUP_SIZE=$((superSize - 134217728))   # 128MB margin - reduced from 256MB to fit within super budget
     
     lpargs="-F --virtual-ab --output $work_dir/build/baserom/images/super.img --metadata-size 65536 --super-name super --metadata-slots 3 --block-size 4096 --device super:$superSize --group=qti_dynamic_partitions_a:$GROUP_SIZE --group=qti_dynamic_partitions_b:$GROUP_SIZE"
     

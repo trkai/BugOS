@@ -1,21 +1,22 @@
-name: PenguinOS ROM Build
+name: BugOS ROM Build
 
 on:
   workflow_dispatch:
     inputs:
       input_url:
-        description: 'URL of the ROM to build'
+        description: 'URL of the ROM'
         required: true
       builder_name:
         description: 'Tên người build'
         required: false
-      
+
 jobs:
   Initialize:
     runs-on: ubuntu-latest
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -31,9 +32,18 @@ jobs:
           docker rmi `docker images -q` || true
           sudo apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell mysql* php* || true
           sudo apt-get -y autoremove --purge || true
-          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php || true
           sudo apt-get -y autoclean || true
           sudo apt-get clean || true
+
+      # Dọn triệt để trạng thái dpkg còn sót lại của các gói vừa purge ở trên
+      # (đặc biệt là php8.3-fpm hay bị kẹt "half-configured" khiến mọi lệnh apt sau đó fail).
+      - name: Fix broken package state (dpkg)
+        run: |
+          sudo dpkg --configure -a || true
+          sudo apt-get -y purge php8.3-fpm php8.3-common php8.3-cli php8.3-cgi php8.3-phpdbg 2>/dev/null || true
+          sudo rm -rf /etc/php /usr/share/dotnet /etc/mysql
+          sudo apt-get update
+          sudo apt-get install -f -y || true
 
       - name: Checkout repository
         uses: actions/checkout@main
@@ -47,7 +57,7 @@ jobs:
         run: |
           echo "Setting Vienam timezone"
           sudo timedatectl set-timezone Asia/Ho_Chi_Minh
-          
+
       - name: Install OpenJDK
         uses: actions/setup-java@v4
         with:
@@ -57,7 +67,7 @@ jobs:
       - name: Install Stuff
         run: |
           sudo bash setup.sh
-        
+
       - name: Giving permission
         run: |
           sudo chmod 777 -R *
@@ -73,24 +83,26 @@ jobs:
           python notify.py pack "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
           sudo bash packROM.sh
 
-      - name: Setup Rclone...
-        run: |
-          cat << 'EOF' > rclone.conf
-          ${{ secrets.RCLONE_DRIVE_CONFIG }}
-          EOF
-          
+      # uploadROM.sh giờ chỉ đóng gói zip flashable (đã bỏ rclone/Google Drive).
+      # notify.py sẽ tự upload file zip này lên gofile.io ở step "Success Notification".
       - name: Upload ROM...
         run: |
           python notify.py upload "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
           sudo -E bash uploadROM.sh
-      
+
       - name: Success Notification
         if: success()
         run: |
-          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
+          # output_zip.txt chỉ chứa tên file, file zip thật nằm trong out/
+          ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
+          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}" "" "$ROM_ZIP_PATH"
 
       - name: Failure Notification
         if: failure()
         run: |
           python notify.py fail "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
-          
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sudo rm -rf out build

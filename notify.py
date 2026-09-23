@@ -50,6 +50,43 @@ def is_available(value):
         return False
     return True
 
+def upload_to_gofile(file_path, token=""):
+    """Upload file ROM lên gofile.io. Trả về link downloadPage nếu thành công, None nếu lỗi."""
+    if not file_path or not os.path.exists(file_path):
+        print(f"Lỗi: Không tìm thấy file để upload lên gofile.io: {file_path}")
+        return None
+
+    try:
+        print("Đang lấy server upload tốt nhất từ gofile.io...")
+        servers_res = requests.get("https://api.gofile.io/servers", timeout=15)
+        servers_res.raise_for_status()
+        servers = servers_res.json().get("data", {}).get("servers", [])
+        if not servers:
+            print("Lỗi: Không lấy được server upload từ gofile.io")
+            return None
+        server = servers[0].get("name")
+
+        print(f"Đang upload {file_path} lên server {server}...")
+        upload_url = f"https://{server}.gofile.io/contents/uploadfile"
+        with open(file_path, "rb") as f:
+            files = {"file": (os.path.basename(file_path), f)}
+            data = {"token": token} if token else {}
+            res = requests.post(upload_url, data=data, files=files, timeout=None)
+        res.raise_for_status()
+        res_json = res.json()
+
+        if res_json.get("status") != "ok":
+            print(f"Lỗi upload gofile.io: {res_json}")
+            return None
+
+        download_page = res_json.get("data", {}).get("downloadPage")
+        print(f"Upload thành công! Link tải: {download_page}")
+        return download_page
+
+    except Exception as e:
+        print(f"Lỗi khi upload lên gofile.io: {e}")
+        return None
+
 def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id=None,
                        build_id="Unknown", builder_name="", builder_id="", gofile_link=""):
     icon, status_label = get_status_line(status)
@@ -126,7 +163,7 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
 
     message = "\n".join(message_lines)
 
-    # Nút bấm inline: chỉ hiện nút lấy link tải ROM khi đã có link gofile.io (sau khi upload xong)
+    # Nút bấm inline: chỉ hiện nút tải ROM khi đã có link gofile.io (sau khi upload xong)
     reply_markup = None
     if is_available(gofile_link):
         reply_markup = json.dumps({
@@ -210,7 +247,7 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print("Sử dụng: python notify.py <status> <repo_name> <rom_link> [prefix_id] [builder_name] [builder_id] [gofile_link]")
+        print("Sử dụng: python notify.py <status> <repo_name> <rom_link> [prefix_id] [builder_name] [builder_id] [gofile_link] [rom_zip_path]")
         sys.exit(1)
 
     status = sys.argv[1]
@@ -224,8 +261,14 @@ if __name__ == "__main__":
     builder_name = sys.argv[5] if len(sys.argv) > 5 else ""
     builder_id = sys.argv[6] if len(sys.argv) > 6 else ""
 
-    # Link tải ROM trên gofile.io, sinh ra ở bước upload trước đó trong workflow
+    # Link tải ROM trên gofile.io, nếu đã có sẵn (ví dụ upload ở step khác rồi truyền vào)
     gofile_link = sys.argv[7] if len(sys.argv) > 7 else os.environ.get("GOFILE_LINK", "")
+
+    # Đường dẫn tới file zip ROM cần upload lên gofile.io (nếu status=success và chưa có gofile_link)
+    rom_zip_path = sys.argv[8] if len(sys.argv) > 8 else os.environ.get("ROM_ZIP_PATH", "")
+
+    # Token tài khoản gofile.io (không bắt buộc, để upload dạng guest thì bỏ trống)
+    gofile_token = os.environ.get("GOFILE_TOKEN", "")
 
     # Lấy token, channel ID, message ID và Build ID từ biến môi trường
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -246,6 +289,15 @@ if __name__ == "__main__":
     if not bot_token or not channel_id:
         print("Lỗi: Thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHANNEL_ID trong biến môi trường.")
         sys.exit(1)
+
+    # Nếu build thành công, chưa có sẵn gofile_link, nhưng có đường dẫn file zip -> tự upload lên gofile.io
+    if status.lower() == 'success' and not is_available(gofile_link) and rom_zip_path:
+        uploaded_link = upload_to_gofile(rom_zip_path, gofile_token)
+        if uploaded_link:
+            gofile_link = uploaded_link
+            if "GITHUB_ENV" in os.environ:
+                with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+                    f.write(f"GOFILE_LINK={uploaded_link}\n")
 
     send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id,
                        build_id, builder_name, builder_id, gofile_link)

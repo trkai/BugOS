@@ -1,10 +1,5 @@
 work_dir=$(pwd)
 source $work_dir/functions.sh
-RCLONE_CONFIG_1DRIVE="$work_dir/rclone.conf"
-
-# Cấu hình Google Drive 
-GDRIVE_REMOTE="gdrive"
-GDRIVE_FOLDER="PenguinOS_Releases" 
 
 os_type=$(cat $work_dir/bin/ddevice/os_type.txt 2>/dev/null)
 base_rom_code=$(cat $work_dir/bin/ddevice/base_rom_code.txt 2>/dev/null)
@@ -84,28 +79,8 @@ hash=$(md5sum "out/${os_type}_${device_f}_${base_rom_code}.zip" | head -c 5)
 final_zip_name="${os_type}_${polyxver}_${device_f}_${base_rom_code}_${hash}_${status}.zip"
 mv "out/${os_type}_${device_f}_${base_rom_code}.zip" "out/$final_zip_name"
 
-repack "Build completed"    
+repack "Build completed"
 repack "Output: $(pwd)/out/$final_zip_name"
-upload "Uploading"
+
 output_file="out/$final_zip_name"
 echo "$final_zip_name" > $work_dir/bin/ddevice/output_zip.txt
-
-uploaddir=$true_os
-
-# Upload thẳng lên Google Drive theo thư mục codename chuẩn (peridot)
-upload "Uploading to Google Drive..."
-rclone -v --config="$RCLONE_CONFIG_1DRIVE" copy "$output_file" "$GDRIVE_REMOTE:$GDRIVE_FOLDER/${uploaddir}/${polyxver}/${device_f}/" \
-    --drive-chunk-size 128M \
-    --tpslimit 4 \
-    --retries 3 \
-    --timeout 15m \
-    --contimeout 15m || {
-    upload "Lỗi khi upload file lên Google Drive!"
-    exit 1
-}
-
-upload "Clean Workflow.."
-rm -rf $work_dir/out
-rm -rf $work_dir/build
-
-upload "Build ${os_type}_${polyxver} for ${device_f} successful!"

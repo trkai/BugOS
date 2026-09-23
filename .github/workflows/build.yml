@@ -83,18 +83,40 @@ jobs:
           sudo bash packROM.sh
 
       # uploadROM.sh giờ chỉ đóng gói zip flashable (đã bỏ rclone/Google Drive).
-      # notify.py sẽ tự upload file zip này lên gofile.io ở step "Success Notification".
       - name: Upload ROM...
         run: |
           python notify.py upload "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
           sudo -E bash uploadROM.sh
 
+      # ---------------------------------------------------------
+      # BƯỚC MỚI: TẢI ROM LÊN GOFILE.IO
+      # ---------------------------------------------------------
+      - name: Upload ROM to Gofile.io
+        if: success()
+        id: upload_gofile
+        run: |
+          # 1. Lấy địa chỉ máy chủ Gofile
+          SERVER=$(curl -s "https://api.gofile.io/servers" | jq -r '.data.servers[0].name')
+          
+          # 2. Định nghĩa file ROM ZIP
+          ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
+          echo "Đang upload $ROM_ZIP_PATH lên server $SERVER..."
+          
+          # 3. Gửi lệnh tải lên
+          UPLOAD_RESP=$(curl -s -F "file=@$ROM_ZIP_PATH" -F "token=${{ env.GOFILE_TOKEN }}" "https://$SERVER.gofile.io/contents/uploadfile")
+          
+          # 4. Trích xuất link trả về
+          DOWNLOAD_LINK=$(echo$UPLOAD_RESP | jq -r '.data.downloadPage')
+          
+          # 5. Lưu link vào biến môi trường để bước sau sử dụng
+          echo "GOFILE_LINK=$DOWNLOAD_LINK" >> $GITHUB_ENV
+          echo "Upload hoàn tất: $DOWNLOAD_LINK"
+
       - name: Success Notification
         if: success()
         run: |
-          # output_zip.txt chỉ chứa tên file, file zip thật nằm trong out/
-          ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
-          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}" "" "$ROM_ZIP_PATH"
+          # Truyền link tải (GOFILE_LINK) thay vì đường dẫn local vào tham số thứ 7
+          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}" "${{ env.GOFILE_LINK }}"
 
       - name: Failure Notification
         if: failure()

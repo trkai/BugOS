@@ -38,7 +38,7 @@ def get_progress_text(status):
         'upload': 95,
     }
     if status == 'success':
-        return "✅ Hoàn tất [ 100% ]"
+        return "✅ Hoàn tất"
     if status == 'fail':
         return "❌ Thất bại"
     if status in percent_map:
@@ -92,27 +92,29 @@ def upload_to_gofile(file_path, token=""):
 
 def build_message(status, rom_link, build_id, builder_name):
     progress_text = get_progress_text(status)
+    
+    # Lấy thông tin theo đúng yêu cầu
     device_name = read_file_if_exists("bin/ddevice/device_name.txt", "Thiết bị Xiaomi")
     
-    codename = read_file_if_exists("bin/ddevice/device_code.txt").capitalize()
+    codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
     if not codename:
-        codename = read_file_if_exists("bin/ddevice/device_model.txt").capitalize()
+        codename = read_file_if_exists("bin/ddevice/device_model.txt").upper()
 
-    version_rom = read_file_if_exists("bin/ddevice/rom_version.txt", "Không rõ bản dựng")
+    xiaomi_version = read_file_if_exists("bin/ddevice/rom_version.txt", "Không rõ bản dựng")
     version_tool = read_file_if_exists("Version", "1.1")
     builder_text = builder_name if builder_name else "iabi"
 
-    # Định dạng hiển thị dọc kèm Emoji đầy đủ
+    # Định dạng hiển thị dọc giống nguyên bản yêu cầu
     lines = [
-        "👾 <b>TIẾN TRÌNH BUILD ROM</b>",
+        "👾 TIẾN TRÌNH BUILD ROM",
         "━━━━━━━━━━━━━━━━━━",
         f"👤 Người thực hiện: {builder_text}",
-        f"🛠️ Phiên bản: BugOS {version_tool}",
+        f"🛠 Phiên bản: BugOS {version_tool}",
         f"📱 Device: {device_name}",
         f"📍 Codename: {codename}",
-        f"💿 Hệ điều hành: {version_rom}",
+        f"💿 Hệ điều hành: {xiaomi_version}",
         "━━━━━━━━━━━━━━━━━━",
-        f"📈 Tiến trình: <b>{progress_text}</b>",
+        f"📈 Tiến trình: {progress_text}",
         f"🆔 Build ID: {build_id}",
         f"🔗 Base ROM (Nguồn): <a href='{rom_link}'>Link</a>"
     ]
@@ -130,7 +132,7 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
-    # Giữ nguyên nút bấm Tải ROM khi có link Gofile
+    # Nút bấm Tải ROM khi có link Gofile
     if is_available(gofile_link):
         payload["reply_markup"] = json.dumps({
             "inline_keyboard": [[
@@ -204,7 +206,4 @@ if __name__ == "__main__":
         if uploaded_link:
             gofile_link = uploaded_link
             if "GITHUB_ENV" in os.environ:
-                with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-                    f.write(f"GOFILE_LINK={uploaded_link}\n")
-
-    send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id, build_id, builder_name, builder_id, gofile_link)
+                with op

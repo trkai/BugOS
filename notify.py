@@ -54,7 +54,7 @@ def is_available(value):
     return True
 
 def get_prop_value(prop_path, key, default=""):
-    """Đọc trực tiếp 1 property từ file build.prop, đảm bảo đồng bộ với build.sh"""
+    """Đọc trực tiếp 1 property từ file build.prop"""
     if not os.path.exists(prop_path):
         return default
     try:
@@ -68,31 +68,63 @@ def get_prop_value(prop_path, key, default=""):
         pass
     return default
 
-
 def build_message(status, rom_link, build_id, builder_name):
     progress_text = get_progress_text(status)
 
     system_prop = "build/baserom/images/system/system/build.prop"
     product_prop = "build/baserom/images/product/etc/build.prop"
 
-    # Device name: ưu tiên file device_name.txt (do getname.sh ghi),
-    # fallback sang build.prop marketname nếu file trống/thiếu
-    device_name = read_file_if_exists("bin/ddevice/device_name.txt", "")
-    if not device_name:
-        device_name = get_prop_value(product_prop, "ro.product.marketname",
-                        get_prop_value(system_prop, "ro.product.marketname", "Xiaomi Device"))
+    # 1. Xử lý tên Device (Ưu tiên đọc name_devices.txt do fetchINFO / getname trích xuất)
+    device_name = read_file_if_exists("bin/ddevice/name_devices.txt", "")
+    if device_name and "|" in device_name:
+        # Nếu là chuỗi "POCO F8 Pro|REDMI K90|Redmi K90" -> lấy tên đầu tiên "POCO F8 Pro"
+        device_name = device_name.split("|")[0].strip()
 
+    if not device_name or device_name.lower() == "xiaomi device":
+        device_name = read_file_if_exists("bin/ddevice/device_name.txt", "")
+
+    if not device_name or device_name.lower() == "xiaomi device":
+        device_name = get_prop_value(product_prop, "ro.product.marketname",
+                        get_prop_value(system_prop, "ro.product.marketname", ""))
+        
+    if not device_name:
+        device_name = get_prop_value(product_prop, "ro.product.model",
+                        get_prop_value(system_prop, "ro.product.model", "Xiaomi Device"))
+
+    # 2. Xử lý Codename
     codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
     if not codename:
         codename = read_file_if_exists("bin/ddevice/device_model.txt").upper()
+    if not codename:
+        codename = get_prop_value(system_prop, "ro.product.device", "UNKNOWN").upper()
 
-    # Phiên bản HĐH: đọc thẳng prop mà build.sh đã đóng dấu "BugOS 1.1"
-    xiaomi_version = get_prop_value(system_prop, "ro.build.display.id", "")
+    # 3. Xử lý Hệ điều hành (Khắc phục triệt để lỗi "Không rõ bản dựng")
+    # Đọc trực tiếp các file do fetchINFO.sh xuất ra
+    rom_os = read_file_if_exists("bin/ddevice/rom_os.txt", "")           # Ví dụ: OS3
+    base_rom_code = read_file_if_exists("bin/ddevice/base_rom_code.txt", "") # Ví dụ: OS3.0.307.0.WPKCNXM
+
+    if rom_os and base_rom_code:
+        # Tránh trường hợp 2 chuỗi trùng nhau
+        if rom_os in base_rom_code:
+            xiaomi_version = base_rom_code
+        else:
+            xiaomi_version = f"{rom_os} ({base_rom_code})"
+    elif base_rom_code:
+        xiaomi_version = base_rom_code
+    elif rom_os:
+        xiaomi_version = rom_os
+    else:
+        # Fallback đọc từ file prop nếu chưa chạy qua fetchINFO
+        display_id = get_prop_value(system_prop, "ro.build.display.id", "")
+        os_name = get_prop_value(system_prop, "ro.mi.os.version.name", "")
+        ver_inc = get_prop_value(system_prop, "ro.mi.os.version.incremental", "")
+        xiaomi_version = display_id or (f"{os_name} ({ver_inc})" if os_name and ver_inc else os_name or ver_inc)
+
     if not xiaomi_version:
-        xiaomi_version = get_prop_value(system_prop, "ro.mi.os.version.name", "Không rõ bản dựng")
+        xiaomi_version = "Không rõ bản dựng"
 
-    # Version tool: cố định luôn "1.1" thay vì đọc file Version dễ lệch nội dung
-    version_tool = "1.1"
+    # Version tool & Builder
+    version_tool = read_file_if_exists("Version", "1.1")
     builder_text = builder_name if builder_name else "iabi"
 
     lines = [
@@ -122,26 +154,18 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
-    # Nếu thành công, thêm nút tải ROM (nếu có) và nút Duyệt để gửi vào nhóm.
     if is_success:
         buttons = []
         if is_available(archive_link):
              buttons.append([{"text": "⬇️ Tải ROM", "url": archive_link}])
-        # Thêm nút bấm Duyệt (Approve).
-        # callback_data chứa thông tin định tuyến để gửi vào channel
         buttons.append([{"text": "✅ Duyệt & Gửi vào Nhóm", "callback_data": f"approve_rom_{build_id}"}])
-
         payload["reply_markup"] = json.dumps({"inline_keyboard": buttons})
 
-    # Luôn gửi/cập nhật tin nhắn cho cá nhân (builder_id), không gửi trực tiếp lên channel.
-    target_chat_id = builder_id
-
-    # Khi build THÀNH CÔNG: luôn gửi một tin nhắn MỚI để duyệt, không sửa (edit) lại
-    # tin nhắn tiến trình cũ — để tin duyệt luôn nổi bật, tách biệt.
+    target_chat_id = builder_id if is_available(builder_id) else channel_id
     use_msg_id = None if is_success else msg_id
 
     if not is_available(target_chat_id):
-        print("Lỗi: Không tìm thấy builder_id (TELEGRAM_OWNER_ID) để gửi báo cáo.")
+        print("Lỗi: Không tìm thấy ID chat để gửi báo cáo.")
         return
 
     payload["chat_id"] = target_chat_id
@@ -158,7 +182,6 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         res_data = response.json()
         new_msg_id = res_data.get('result', {}).get('message_id')
 
-        # Cập nhật ID tin nhắn cho các tiến trình cập nhật tiếp theo (trừ khi là tin nhắn thành công/duyệt)
         if not is_success and not use_msg_id and new_msg_id and "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_MSG_ID={new_msg_id}\n")
@@ -196,8 +219,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if status.lower() == 'success' and not is_available(archive_link) and rom_zip_path:
-        # LƯU Ý: Đảm bảo bạn đã import/định nghĩa hàm upload_to_archive.
-        # Nếu hàm này nằm ở file khác, cần "from ten_file import upload_to_archive"
         if 'upload_to_archive' in globals():
             uploaded_link = upload_to_archive(rom_zip_path, build_id)
             if uploaded_link:
@@ -209,4 +230,3 @@ if __name__ == "__main__":
             print("Cảnh báo: Không tìm thấy hàm upload_to_archive(). Bỏ qua bước upload.")
 
     send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id, build_id, builder_name, builder_id, archive_link)
-    

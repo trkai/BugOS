@@ -13,7 +13,8 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-      GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
+      ARCHIVE_ACCESS_KEY: ${{ secrets.ARCHIVE_ACCESS_KEY }}
+      ARCHIVE_SECRET_KEY: ${{ secrets.ARCHIVE_SECRET_KEY }}
       BUILDER_NAME: "iabi"
       BUILDER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
     steps:
@@ -47,7 +48,7 @@ jobs:
 
       - name: Start Notify
         run: |
-          pip install requests
+          pip install requests internetarchive
           python notify.py start "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
 
       - name: Set up Time

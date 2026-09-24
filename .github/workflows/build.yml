@@ -90,45 +90,49 @@ jobs:
         if: success()
         run: |
           export ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
-          python3 - <<'PYEOF'
-import os
-import internetarchive
-
-rom_zip_path = os.environ.get("ROM_ZIP_PATH", "")
-build_id = os.environ.get("TELEGRAM_BUILD_ID", "unknown")
-access_key = os.environ.get("ARCHIVE_ACCESS_KEY", "")
-secret_key = os.environ.get("ARCHIVE_SECRET_KEY", "")
-
-if not rom_zip_path or not os.path.exists(rom_zip_path):
-    print("Lỗi: Không tìm thấy file ROM zip để upload.")
-    exit(0)
-
-file_name = os.path.basename(rom_zip_path)
-identifier = f"bugos_rom_{build_id}".lower()
-
-print(f"Đang upload {file_name} lên archive.org với định danh: {identifier}...")
-try:
-    internetarchive.upload(
-        identifier,
-        files=[rom_zip_path],
-        access_key=access_key,
-        secret_key=secret_key,
-        metadata={"title": f"BugOS ROM Build {build_id}", "mediatype": "software"},
-        retries=3,
-    )
-    download_link = f"https://archive.org/download/{identifier}/{file_name}"
-    print(f"Upload thành công! Link tải: {download_link}")
-
-    with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-        f.write(f"ARCHIVE_LINK={download_link}\n")
-except Exception as e:
-    print(f"Lỗi khi upload lên Archive: {e}")
-PYEOF
+          
+          # Dùng ký tự '|' để giữ chuẩn form YAML, sau đó cắt bỏ '|' đi để lưu thành file upload.py hoàn chỉnh
+          cat << 'EOF' | sed 's/^|//' > upload_archive.py
+          |import os
+          |import internetarchive
+          |
+          |rom_zip_path = os.environ.get("ROM_ZIP_PATH", "")
+          |build_id = os.environ.get("TELEGRAM_BUILD_ID", "unknown")
+          |access_key = os.environ.get("ARCHIVE_ACCESS_KEY", "")
+          |secret_key = os.environ.get("ARCHIVE_SECRET_KEY", "")
+          |
+          |if not rom_zip_path or not os.path.exists(rom_zip_path):
+          |    print("Lỗi: Không tìm thấy file ROM zip để upload.")
+          |    exit(0)
+          |
+          |file_name = os.path.basename(rom_zip_path)
+          |identifier = f"bugos_rom_{build_id}".lower()
+          |
+          |print(f"Đang upload {file_name} lên archive.org với định danh: {identifier}...")
+          |try:
+          |    internetarchive.upload(
+          |        identifier,
+          |        files=[rom_zip_path],
+          |        access_key=access_key,
+          |        secret_key=secret_key,
+          |        metadata={"title": f"BugOS ROM Build {build_id}", "mediatype": "software"},
+          |        retries=3,
+          |    )
+          |    download_link = f"https://archive.org/download/{identifier}/{file_name}"
+          |    print(f"Upload thành công! Link tải: {download_link}")
+          |
+          |    with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+          |        f.write(f"ARCHIVE_LINK={download_link}\n")
+          |except Exception as e:
+          |    print(f"Lỗi khi upload lên Archive: {e}")
+          EOF
+          
+          # Tiến hành chạy file Python vừa được tạo
+          python3 upload_archive.py
 
       - name: Success Notification
         if: success()
         run: |
-          # Bỏ parameter thứ 7 đi, file notify.py sẽ tự đọc env ARCHIVE_LINK
           python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
 
       - name: Failure Notification

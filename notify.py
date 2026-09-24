@@ -76,9 +76,9 @@ def upload_to_archive(file_path, build_id):
         file_name = os.path.basename(file_path)
         # Tạo định danh duy nhất cho file tải lên (chỉ dùng chữ thường, số, dấu gạch dưới)
         identifier = f"bugos_rom_{build_id}".lower()
-        
+
         print(f"Đang upload {file_name} lên archive.org với định danh: {identifier}...")
-        
+
         # Đẩy file lên Archive.org
         internetarchive.upload(
             identifier,
@@ -88,7 +88,7 @@ def upload_to_archive(file_path, build_id):
             metadata={'title': f'BugOS ROM Build {build_id}', 'mediatype': 'software'},
             retries=3
         )
-        
+
         # Trích xuất link tải trực tiếp
         download_link = f"https://archive.org/download/{identifier}/{file_name}"
         print(f"Upload thành công! Link tải: {download_link}")
@@ -100,9 +100,9 @@ def upload_to_archive(file_path, build_id):
 
 def build_message(status, rom_link, build_id, builder_name):
     progress_text = get_progress_text(status)
-    
+
     device_name = read_file_if_exists("bin/ddevice/device_name.txt", "Thiết bị Xiaomi")
-    
+
     codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
     if not codename:
         codename = read_file_if_exists("bin/ddevice/device_model.txt").upper()
@@ -138,7 +138,7 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
-    # Nếu thành công, thêm nút duyệt (Approve) và nút tải ROM (nếu có).
+    # Nếu thành công, thêm nút tải ROM (nếu có) và nút Duyệt để gửi vào nhóm.
     if is_success:
         buttons = []
         if is_available(archive_link):
@@ -146,7 +146,7 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         # Thêm nút bấm Duyệt (Approve).
         # callback_data chứa thông tin định tuyến để gửi vào channel
         buttons.append([{"text": "✅ Duyệt & Gửi vào Nhóm", "callback_data": f"approve_rom_{build_id}"}])
-        
+
         payload["reply_markup"] = json.dumps({"inline_keyboard": buttons})
     else:
          # Nếu đang trong tiến trình thì không có nút
@@ -154,7 +154,10 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
 
     # Luôn gửi/cập nhật tin nhắn cho cá nhân (builder_id), không gửi trực tiếp lên channel.
     target_chat_id = builder_id
-    use_msg_id = msg_id
+
+    # Khi build THÀNH CÔNG: luôn gửi một tin nhắn MỚI để duyệt, không sửa (edit) lại
+    # tin nhắn tiến trình cũ — để tin duyệt luôn nổi bật, tách biệt.
+    use_msg_id = None if is_success else msg_id
 
     if not is_available(target_chat_id):
         print("Lỗi: Không tìm thấy builder_id (TELEGRAM_OWNER_ID) để gửi báo cáo.")
@@ -174,7 +177,7 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         res_data = response.json()
         new_msg_id = res_data.get('result', {}).get('message_id')
 
-        # Cập nhật ID tin nhắn cho các tiến trình cập nhật tiếp theo (trừ khi là tin nhắn duyệt)
+        # Cập nhật ID tin nhắn cho các tiến trình cập nhật tiếp theo (trừ khi là tin nhắn thành công/duyệt)
         if not is_success and not use_msg_id and new_msg_id and "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_MSG_ID={new_msg_id}\n")
@@ -192,7 +195,7 @@ if __name__ == "__main__":
     prefix = sys.argv[4] if len(sys.argv) > 4 else "build"
     builder_name = sys.argv[5] if len(sys.argv) > 5 else ""
     builder_id = sys.argv[6] if len(sys.argv) > 6 else ""
-    
+
     archive_link = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else os.environ.get("ARCHIVE_LINK", "")
     rom_zip_path = sys.argv[8] if len(sys.argv) > 8 and sys.argv[8] else os.environ.get("ROM_ZIP_PATH", "")
 
@@ -221,4 +224,3 @@ if __name__ == "__main__":
                     f.write(f"ARCHIVE_LINK={uploaded_link}\n")
 
     send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id, build_id, builder_name, builder_id, archive_link)
-    

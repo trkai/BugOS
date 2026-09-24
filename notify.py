@@ -38,7 +38,7 @@ def get_progress_text(status):
         'upload': 95,
     }
     if status == 'success':
-        return "✅ Hoàn tất"
+        return "✅ Hoàn tất [ 100% ]"
     if status == 'fail':
         return "❌ Thất bại"
     if status in percent_map:
@@ -138,22 +138,26 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
-    # Hiển thị nút bấm Tải ROM khi có link Archive.org
-    if is_available(archive_link):
-        payload["reply_markup"] = json.dumps({
-            "inline_keyboard": [[
-                {"text": "⬇️ Tải ROM", "url": archive_link}
-            ]]
-        })
-
+    # Nếu thành công, thêm nút duyệt (Approve) và nút tải ROM (nếu có).
     if is_success:
-        target_chat_id = channel_id
-        use_msg_id = None 
+        buttons = []
+        if is_available(archive_link):
+             buttons.append([{"text": "⬇️ Tải ROM", "url": archive_link}])
+        # Thêm nút bấm Duyệt (Approve).
+        # callback_data chứa thông tin định tuyến để gửi vào channel
+        buttons.append([{"text": "✅ Duyệt & Gửi vào Nhóm", "callback_data": f"approve_rom_{build_id}"}])
+        
+        payload["reply_markup"] = json.dumps({"inline_keyboard": buttons})
     else:
-        target_chat_id = builder_id
-        use_msg_id = msg_id
+         # Nếu đang trong tiến trình thì không có nút
+         pass
+
+    # Luôn gửi/cập nhật tin nhắn cho cá nhân (builder_id), không gửi trực tiếp lên channel.
+    target_chat_id = builder_id
+    use_msg_id = msg_id
 
     if not is_available(target_chat_id):
+        print("Lỗi: Không tìm thấy builder_id (TELEGRAM_OWNER_ID) để gửi báo cáo.")
         return
 
     payload["chat_id"] = target_chat_id
@@ -170,6 +174,7 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         res_data = response.json()
         new_msg_id = res_data.get('result', {}).get('message_id')
 
+        # Cập nhật ID tin nhắn cho các tiến trình cập nhật tiếp theo (trừ khi là tin nhắn duyệt)
         if not is_success and not use_msg_id and new_msg_id and "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_MSG_ID={new_msg_id}\n")
@@ -196,16 +201,4 @@ if __name__ == "__main__":
     msg_id = os.environ.get("TELEGRAM_MSG_ID")
     build_id = os.environ.get("TELEGRAM_BUILD_ID")
 
-    if not build_id:
-        random_digits = ''.join(random.choices(string.digits, k=8))
-        build_id = f"{prefix}_{random_digits}"
-        if "GITHUB_ENV" in os.environ:
-            with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-                f.write(f"TELEGRAM_BUILD_ID={build_id}\n")
-
-    if not bot_token:
-        sys.exit(1)
-
-    # Kích hoạt Upload nếu build thành công và chưa có sẵn link
-    if status.lower() == 'success' and not is_available(archive_link) and rom_zip_path:
-        uploaded_l
+    if 

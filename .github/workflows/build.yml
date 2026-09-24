@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       input_url:
-        description: 'URL of the ROM to build'
+        description: 'URL'
         required: true
 
 jobs:
@@ -86,13 +86,42 @@ jobs:
           python notify.py upload "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
           sudo -E bash uploadROM.sh
 
+      - name: Upload ROM to Archive.org
+        if: success()
+        run: |
+          export ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
+          python3 - <<'PYEOF'
+          import os
+          import internetarchive
+
+          rom_zip_path = os.environ["ROM_ZIP_PATH"]
+          build_id = os.environ.get("TELEGRAM_BUILD_ID", "unknown")
+          access_key = os.environ["ARCHIVE_ACCESS_KEY"]
+          secret_key = os.environ["ARCHIVE_SECRET_KEY"]
+
+          file_name = os.path.basename(rom_zip_path)
+          identifier = f"bugos_rom_{build_id}".lower()
+
+          print(f"Đang upload {file_name} lên archive.org với định danh: {identifier}...")
+          internetarchive.upload(
+              identifier,
+              files=[rom_zip_path],
+              access_key=access_key,
+              secret_key=secret_key,
+              metadata={"title": f"BugOS ROM Build {build_id}", "mediatype": "software"},
+              retries=3,
+          )
+          download_link = f"https://archive.org/download/{identifier}/{file_name}"
+          print(f"Upload thành công! Link tải: {download_link}")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+              f.write(f"ARCHIVE_LINK={download_link}\n")
+          PYEOF
+
       - name: Success Notification
         if: success()
         run: |
-          # output_zip.txt chỉ chứa tên file, file zip thật nằm trong out/
-          ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
-          # Gọi notify.py với param 7 rỗng ("") và param 8 là đường dẫn file ZIP để script tự upload
-          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}" "" "$ROM_ZIP_PATH"
+          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}" "$ARCHIVE_LINK"
 
       - name: Failure Notification
         if: failure()

@@ -201,4 +201,24 @@ if __name__ == "__main__":
     msg_id = os.environ.get("TELEGRAM_MSG_ID")
     build_id = os.environ.get("TELEGRAM_BUILD_ID")
 
-    if 
+    if not build_id:
+        random_digits = ''.join(random.choices(string.digits, k=8))
+        build_id = f"{prefix}_{random_digits}"
+        if "GITHUB_ENV" in os.environ:
+            with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+                f.write(f"TELEGRAM_BUILD_ID={build_id}\n")
+
+    if not bot_token:
+        sys.exit(1)
+
+    # Đã sửa lại tên biến thành uploaded_link
+    if status.lower() == 'success' and not is_available(archive_link) and rom_zip_path:
+        uploaded_link = upload_to_archive(rom_zip_path, build_id)
+        if uploaded_link:
+            archive_link = uploaded_link
+            if "GITHUB_ENV" in os.environ:
+                with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+                    f.write(f"ARCHIVE_LINK={uploaded_link}\n")
+
+    send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id, build_id, builder_name, builder_id, archive_link)
+    

@@ -53,47 +53,54 @@ def is_available(value):
         return False
     return True
 
-def upload_to_gofile(file_path, token=""):
-    """Upload file ROM lên gofile.io."""
+def upload_to_archive(file_path, build_id):
+    """Upload file ROM lên archive.org."""
     if not file_path or not os.path.exists(file_path):
-        print(f"Lỗi: Không tìm thấy file để upload lên gofile.io: {file_path}")
+        print(f"Lỗi: Không tìm thấy file để upload lên archive.org: {file_path}")
+        return None
+
+    access_key = os.environ.get("ARCHIVE_ACCESS_KEY")
+    secret_key = os.environ.get("ARCHIVE_SECRET_KEY")
+
+    if not access_key or not secret_key:
+        print("Lỗi: Thiếu API Keys của Archive.org (ARCHIVE_ACCESS_KEY và ARCHIVE_SECRET_KEY)")
         return None
 
     try:
-        print("Đang lấy server upload tốt nhất từ gofile.io...")
-        servers_res = requests.get("https://api.gofile.io/servers", timeout=15)
-        servers_res.raise_for_status()
-        servers = servers_res.json().get("data", {}).get("servers", [])
-        if not servers:
-            return None
-        server = servers[0].get("name")
+        import internetarchive
+    except ImportError:
+        print("Lỗi: Thư viện 'internetarchive' chưa cài đặt. Hãy thêm vào build.yml")
+        return None
 
-        print(f"Đang upload {file_path} lên server {server}...")
-        upload_url = f"https://{server}.gofile.io/contents/uploadfile"
+    try:
+        file_name = os.path.basename(file_path)
+        # Tạo định danh duy nhất cho file tải lên (chỉ dùng chữ thường, số, dấu gạch dưới)
+        identifier = f"bugos_rom_{build_id}".lower()
         
-        with open(file_path, "rb") as f:
-            files = {"file": (os.path.basename(file_path), f)}
-            data = {"token": token} if token else {}
-            res = requests.post(upload_url, data=data, files=files, timeout=None)
-            
-        res.raise_for_status()
-        res_json = res.json()
-
-        if res_json.get("status") != "ok":
-            return None
-
-        download_page = res_json.get("data", {}).get("downloadPage")
-        print(f"Upload thành công! Link tải: {download_page}")
-        return download_page
+        print(f"Đang upload {file_name} lên archive.org với định danh: {identifier}...")
+        
+        # Đẩy file lên Archive.org
+        internetarchive.upload(
+            identifier,
+            files=[file_path],
+            access_key=access_key,
+            secret_key=secret_key,
+            metadata={'title': f'BugOS ROM Build {build_id}', 'mediatype': 'software'},
+            retries=3
+        )
+        
+        # Trích xuất link tải trực tiếp
+        download_link = f"https://archive.org/download/{identifier}/{file_name}"
+        print(f"Upload thành công! Link tải: {download_link}")
+        return download_link
 
     except Exception as e:
-        print(f"Lỗi khi upload lên gofile.io: {e}")
+        print(f"Lỗi khi upload lên archive.org: {e}")
         return None
 
 def build_message(status, rom_link, build_id, builder_name):
     progress_text = get_progress_text(status)
     
-    # Lấy thông tin theo đúng yêu cầu
     device_name = read_file_if_exists("bin/ddevice/device_name.txt", "Thiết bị Xiaomi")
     
     codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
@@ -104,7 +111,6 @@ def build_message(status, rom_link, build_id, builder_name):
     version_tool = read_file_if_exists("Version", "1.1")
     builder_text = builder_name if builder_name else "iabi"
 
-    # Định dạng hiển thị dọc giống nguyên bản yêu cầu
     lines = [
         "👾 TIẾN TRÌNH BUILD ROM",
         "━━━━━━━━━━━━━━━━━━",
@@ -122,7 +128,7 @@ def build_message(status, rom_link, build_id, builder_name):
     return "\n".join(lines)
 
 def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id=None,
-                       build_id="Unknown", builder_name="", builder_id="", gofile_link=""):
+                       build_id="Unknown", builder_name="", builder_id="", archive_link=""):
     is_success = status.lower() == 'success'
     message = build_message(status, rom_link, build_id, builder_name)
 
@@ -132,11 +138,11 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
-    # Nút bấm Tải ROM khi có link Gofile
-    if is_available(gofile_link):
+    # Hiển thị nút bấm Tải ROM khi có link Archive.org
+    if is_available(archive_link):
         payload["reply_markup"] = json.dumps({
             "inline_keyboard": [[
-                {"text": "⬇️ Tải ROM", "url": gofile_link}
+                {"text": "⬇️ Tải ROM", "url": archive_link}
             ]]
         })
 
@@ -182,9 +188,8 @@ if __name__ == "__main__":
     builder_name = sys.argv[5] if len(sys.argv) > 5 else ""
     builder_id = sys.argv[6] if len(sys.argv) > 6 else ""
     
-    gofile_link = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else os.environ.get("GOFILE_LINK", "")
+    archive_link = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else os.environ.get("ARCHIVE_LINK", "")
     rom_zip_path = sys.argv[8] if len(sys.argv) > 8 and sys.argv[8] else os.environ.get("ROM_ZIP_PATH", "")
-    gofile_token = os.environ.get("GOFILE_TOKEN", "")
 
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     channel_id = os.environ.get("TELEGRAM_CHANNEL_ID")
@@ -201,9 +206,6 @@ if __name__ == "__main__":
     if not bot_token:
         sys.exit(1)
 
-    if status.lower() == 'success' and not is_available(gofile_link) and rom_zip_path:
-        uploaded_link = upload_to_gofile(rom_zip_path, gofile_token)
-        if uploaded_link:
-            gofile_link = uploaded_link
-            if "GITHUB_ENV" in os.environ:
-                with op
+    # Kích hoạt Upload nếu build thành công và chưa có sẵn link
+    if status.lower() == 'success' and not is_available(archive_link) and rom_zip_path:
+        uploaded_l

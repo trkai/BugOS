@@ -53,17 +53,46 @@ def is_available(value):
         return False
     return True
 
+def get_prop_value(prop_path, key, default=""):
+    """Đọc trực tiếp 1 property từ file build.prop, đảm bảo đồng bộ với build.sh"""
+    if not os.path.exists(prop_path):
+        return default
+    try:
+        with open(prop_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(f"{key}="):
+                    val = line.split("=", 1)[1].strip()
+                    return val if val else default
+    except Exception:
+        pass
+    return default
+
+
 def build_message(status, rom_link, build_id, builder_name):
     progress_text = get_progress_text(status)
 
-    device_name = read_file_if_exists("bin/ddevice/device_name.txt", "Thiết bị Xiaomi")
+    system_prop = "build/baserom/images/system/system/build.prop"
+    product_prop = "build/baserom/images/product/etc/build.prop"
+
+    # Device name: ưu tiên file device_name.txt (do getname.sh ghi),
+    # fallback sang build.prop marketname nếu file trống/thiếu
+    device_name = read_file_if_exists("bin/ddevice/device_name.txt", "")
+    if not device_name:
+        device_name = get_prop_value(product_prop, "ro.product.marketname",
+                        get_prop_value(system_prop, "ro.product.marketname", "Xiaomi Device"))
 
     codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
     if not codename:
         codename = read_file_if_exists("bin/ddevice/device_model.txt").upper()
 
-    xiaomi_version = read_file_if_exists("bin/ddevice/rom_version.txt", "Không rõ bản dựng")
-    version_tool = read_file_if_exists("Version", "1.1")
+    # Phiên bản HĐH: đọc thẳng prop mà build.sh đã đóng dấu "BugOS 1.1"
+    xiaomi_version = get_prop_value(system_prop, "ro.build.display.id", "")
+    if not xiaomi_version:
+        xiaomi_version = get_prop_value(system_prop, "ro.mi.os.version.name", "Không rõ bản dựng")
+
+    # Version tool: cố định luôn "1.1" thay vì đọc file Version dễ lệch nội dung
+    version_tool = "1.1"
     builder_text = builder_name if builder_name else "iabi"
 
     lines = [

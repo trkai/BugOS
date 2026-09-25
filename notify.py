@@ -4,6 +4,7 @@ import json
 import requests
 import random
 import string
+from datetime import datetime, timezone, timedelta
 
 # Đảm bảo mã hóa UTF-8 cho stdout và stderr
 if hasattr(sys.stdout, 'reconfigure'):
@@ -17,6 +18,7 @@ if hasattr(sys.stderr, 'reconfigure'):
     except Exception:
         pass
 
+
 def read_file_if_exists(path, default=""):
     if os.path.exists(path):
         try:
@@ -27,23 +29,6 @@ def read_file_if_exists(path, default=""):
             return default
     return default
 
-def get_progress_text(status):
-    status = status.lower()
-    percent_map = {
-        'start': 5,
-        'download': 20,
-        'unpack': 35,
-        'build': 55,
-        'pack': 75,
-        'upload': 95,
-    }
-    if status == 'success':
-        return "✅ Hoàn tất"
-    if status == 'fail':
-        return "❌ Thất bại"
-    if status in percent_map:
-        return f"[ {percent_map[status]}% ]"
-    return status.upper()
 
 def is_available(value):
     if not value:
@@ -52,6 +37,7 @@ def is_available(value):
     if val_lower in ["", "chưa rõ", "unknown", "đang xác định...", "⏳ đang quét..."]:
         return False
     return True
+
 
 def get_prop_value(prop_path, key, default=""):
     """Đọc trực tiếp 1 property từ file build.prop"""
@@ -68,16 +54,54 @@ def get_prop_value(prop_path, key, default=""):
         pass
     return default
 
-def build_message(status, rom_link, build_id, builder_name):
-    progress_text = get_progress_text(status)
+
+def html_esc(text):
+    if text is None:
+        return ""
+    return (str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
+
+def bar_for(pct):
+    try:
+        pct = int(pct)
+    except Exception:
+        pct = 0
+    n = (pct + 5) // 10
+    n = max(0, min(10, n))
+    return "▰" * n + "▱" * (10 - n)
+
+
+def get_time_vn():
+    vn_tz = timezone(timedelta(hours=7))
+    return datetime.now(vn_tz).strftime("%H:%M · %d/%m/%Y")
+
+
+STATUS_MAP = {
+    "start":   (8,   "⏳", "Khởi động pipeline",  "Dọn môi trường, cài toolchain…"),
+    "download":(20,  "⬇️", "Đang tải ROM gốc",     "Downloading base ROM…"),
+    "unpack":  (35,  "📂", "Đang giải nén ROM",    "Unpacking partitions…"),
+    "build":   (55,  "🔨", "Đang biên dịch ROM",   "Đang chạy build.sh"),
+    "pack":    (78,  "📦", "Đang đóng gói",        "Đang chạy packROM.sh"),
+    "upload":  (94,  "☁️", "Đang tải lên",         "Upload file ROM…"),
+    "success": (100, "✅", "Hoàn tất",             "ROM đã sẵn sàng để tải về."),
+    "fail":    (0,   "❌", "Build thất bại",       "Pipeline dừng. Mở log để xem lỗi."),
+}
+
+
+def build_message(status, rom_link, build_id, builder_name, run_url=""):
+    status_l = status.lower()
+    pct, icon, title, hint = STATUS_MAP.get(status_l, (0, "ℹ️", status, ""))
 
     system_prop = "build/baserom/images/system/system/build.prop"
     product_prop = "build/baserom/images/product/etc/build.prop"
 
-    # 1. Xử lý tên Device (Ưu tiên đọc name_devices.txt do fetchINFO / getname trích xuất)
+    # ----- 1. Tên Device (giữ nguyên logic gốc, ưu tiên name_devices.txt) -----
     device_name = read_file_if_exists("bin/ddevice/name_devices.txt", "")
     if device_name and "|" in device_name:
-        # Nếu là chuỗi "POCO F8 Pro|REDMI K90|Redmi K90" -> lấy tên đầu tiên "POCO F8 Pro"
         device_name = device_name.split("|")[0].strip()
 
     if not device_name or device_name.lower() == "xiaomi device":
@@ -86,67 +110,80 @@ def build_message(status, rom_link, build_id, builder_name):
     if not device_name or device_name.lower() == "xiaomi device":
         device_name = get_prop_value(product_prop, "ro.product.marketname",
                         get_prop_value(system_prop, "ro.product.marketname", ""))
-        
+
     if not device_name:
         device_name = get_prop_value(product_prop, "ro.product.model",
-                        get_prop_value(system_prop, "ro.product.model", "Xiaomi Device"))
+                        get_prop_value(system_prop, "ro.product.model", ""))
 
-    # 2. Xử lý Codename
+    # ----- 2. Codename -----
     codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
     if not codename:
         codename = read_file_if_exists("bin/ddevice/device_model.txt").upper()
     if not codename:
-        codename = get_prop_value(system_prop, "ro.product.device", "UNKNOWN").upper()
+        codename = get_prop_value(system_prop, "ro.product.device", "").upper()
 
-    # 3. Xử lý Hệ điều hành (Khắc phục triệt để lỗi "Không rõ bản dựng")
-    # Đọc trực tiếp các file do fetchINFO.sh xuất ra
-    rom_os = read_file_if_exists("bin/ddevice/rom_os.txt", "")           # Ví dụ: OS3
-    base_rom_code = read_file_if_exists("bin/ddevice/base_rom_code.txt", "") # Ví dụ: OS3.0.307.0.WPKCNXM
+    # ----- 3. Hệ điều hành -----
+    rom_os = read_file_if_exists("bin/ddevice/rom_os.txt", "")
+    base_rom_code = read_file_if_exists("bin/ddevice/base_rom_code.txt", "")
 
     if rom_os and base_rom_code:
-        # Tránh trường hợp 2 chuỗi trùng nhau
-        if rom_os in base_rom_code:
-            xiaomi_version = base_rom_code
-        else:
-            xiaomi_version = f"{rom_os} ({base_rom_code})"
+        xiaomi_version = base_rom_code if rom_os in base_rom_code else f"{rom_os} ({base_rom_code})"
     elif base_rom_code:
         xiaomi_version = base_rom_code
     elif rom_os:
         xiaomi_version = rom_os
     else:
-        # Fallback đọc từ file prop nếu chưa chạy qua fetchINFO
         display_id = get_prop_value(system_prop, "ro.build.display.id", "")
         os_name = get_prop_value(system_prop, "ro.mi.os.version.name", "")
         ver_inc = get_prop_value(system_prop, "ro.mi.os.version.incremental", "")
         xiaomi_version = display_id or (f"{os_name} ({ver_inc})" if os_name and ver_inc else os_name or ver_inc)
 
-    if not xiaomi_version:
-        xiaomi_version = "Không rõ bản dựng"
+    version_tool = "BugOS 1.1"
 
-    # Version tool & Builder
-    version_tool = read_file_if_exists("Version", "1.1")
-    builder_text = builder_name if builder_name else "iabi"
+    # ----- Khối device (dạng blockquote như mẫu) -----
+    device_pending = not device_name and not codename
+    if device_pending:
+        device_block = "Đang nhận diện thiết bị…"
+    else:
+        device_name_show = device_name or "Xiaomi"
+        codename_show = codename or "UNKNOWN"
+        os_ver_show = xiaomi_version or "Đang đọc bản dựng…"
+        device_block = f"<b>{html_esc(device_name_show)}</b>\n<code>{html_esc(codename_show)}</code>  ·  {html_esc(os_ver_show)}"
+
+    progress_block = "" if status_l == "fail" else f"<code>{bar_for(pct)}  {pct}%</code>\n"
+
+    links = []
+    if is_available(rom_link):
+        links.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
+    if is_available(run_url):
+        links.append(f"📋 <a href='{html_esc(run_url)}'>Log Actions</a>")
+    links_block = "  ·  ".join(links)
 
     lines = [
-        "👾 TIẾN TRÌNH BUILD ROM",
-        "━━━━━━━━━━━━━━━━━━",
-        f"👤 Người thực hiện: {builder_text}",
-        f"🛠 Phiên bản: BugOS {version_tool}",
-        f"📱 Device: {device_name}",
-        f"📍 Codename: {codename}",
-        f"💿 Hệ điều hành: {xiaomi_version}",
-        "━━━━━━━━━━━━━━━━━━",
-        f"📈 Tiến trình: {progress_text}",
-        f"🆔 Build ID: {build_id}",
-        f"🔗 Base ROM (Nguồn): <a href='{rom_link}'>Link</a>"
+        "<b>BugOS</b> · ROM Builder",
+        "",
+        f"<blockquote>{device_block}</blockquote>",
+        "",
+        f"{icon} <b>{title}</b>",
+        f"{progress_block}<i>{html_esc(hint)}</i>",
+        "",
+        f"{html_esc(version_tool)}",
+        f"🆔 <code>{html_esc(build_id)}</code>  ·  🕐 {get_time_vn()}",
+        links_block,
     ]
 
     return "\n".join(lines)
 
+
 def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id=None,
                        build_id="Unknown", builder_name="", builder_id="", archive_link=""):
     is_success = status.lower() == 'success'
-    message = build_message(status, rom_link, build_id, builder_name)
+
+    run_url = ""
+    if os.environ.get("GITHUB_SERVER_URL") and os.environ.get("GITHUB_REPOSITORY") and os.environ.get("GITHUB_RUN_ID"):
+        run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+
+    message = build_message(status, rom_link, build_id, builder_name, run_url)
 
     payload = {
         "text": message,
@@ -157,9 +194,13 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
     if is_success:
         buttons = []
         if is_available(archive_link):
-             buttons.append([{"text": "⬇️ Tải ROM", "url": archive_link}])
+            buttons.append([{"text": "⬇️ Tải ROM", "url": archive_link}])
         buttons.append([{"text": "✅ Duyệt & Gửi vào Nhóm", "callback_data": f"approve_rom_{build_id}"}])
         payload["reply_markup"] = json.dumps({"inline_keyboard": buttons})
+    elif status.lower() == "fail" and is_available(run_url):
+        payload["reply_markup"] = json.dumps({
+            "inline_keyboard": [[{"text": "Mở log GitHub Actions", "url": run_url}]]
+        })
 
     target_chat_id = builder_id if is_available(builder_id) else channel_id
     use_msg_id = None if is_success else msg_id
@@ -188,6 +229,7 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
 
     except Exception as e:
         print(f"Lỗi khi gửi thông báo: {e}")
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:

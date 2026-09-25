@@ -65,9 +65,9 @@ mods "Add ROM Information To HyperOS"
   $repS $tar4 $p1
 
   mods "Updating build.prop"
-  echo "ro.penguinos.version=PenguinOS $myversion | $final_version" >> $my
-  echo "ro.penguinos.osversion=${simposcode}.${build_date}" >> $my
-  echo "ro.penguinos.simposcode=PenguinOS 1.2 $myversion  " >> $my
+  echo "ro.bugos.version=BugOS $myversion | $final_version" >> $my
+  echo "ro.bugos.osversion=${simposcode}.${build_date}" >> $my
+  echo "bugos.simposcode=BugOS 1.1 $myversion  " >> $my
 
   mods "Rebuild..."
   Settings=$(basename $isSettings)

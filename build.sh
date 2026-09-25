@@ -180,7 +180,7 @@ if [ -f "$baserom" ]; then rm -rf "$baserom"; fi
 rm -rf build/baserom/payload.bin build/baserom/super.img
 
 # Kỹ thuật ép tên: Làm sạch hậu tố NT/INT và ép về tên thương hiệu riêng
-MY_BRAND_NAME="GoodBoii"
+MY_BRAND_NAME="BugOS"
 echo "$MY_BRAND_NAME" > $work_dir/bin/ddevice/os_type.txt
 echo "$MY_BRAND_NAME" > $work_dir/bin/ddevice/brand.txt
 

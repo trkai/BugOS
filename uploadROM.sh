@@ -1,25 +1,26 @@
+#!/bin/bash
 work_dir=$(pwd)
 source $work_dir/functions.sh
 
-os_type=$(cat $work_dir/bin/ddevice/os_type.txt 2>/dev/null)
-base_rom_code=$(cat $work_dir/bin/ddevice/base_rom_code.txt 2>/dev/null)
-androidVER=$(cat $work_dir/bin/ddevice/androidver.txt 2>/dev/null)
-rom_os=$(cat $work_dir/bin/ddevice/rom_os.txt 2>/dev/null)
-regionTYPE=$(cat $work_dir/bin/ddevice/device_type.txt 2>/dev/null)
-baserom_type=$(cat $work_dir/bin/ddevice/romtype.txt 2>/dev/null)
+os_type=$(cat $work_dir/bin/ddevice/os_type.txt 2>/dev/null | tr -d '\r\n')
+base_rom_code=$(cat $work_dir/bin/ddevice/base_rom_code.txt 2>/dev/null | tr -d '\r\n')
+androidVER=$(cat $work_dir/bin/ddevice/androidver.txt 2>/dev/null | tr -d '\r\n')
+rom_os=$(cat $work_dir/bin/ddevice/rom_os.txt 2>/dev/null | tr -d '\r\n')
+regionTYPE=$(cat $work_dir/bin/ddevice/device_type.txt 2>/dev/null | tr -d '\r\n')
+baserom_type=$(cat $work_dir/bin/ddevice/romtype.txt 2>/dev/null | tr -d '\r\n')
 
 # ƯU TIÊN LẤY CODENAME CHUẨN ĐÃ ĐƯỢC XỬ LÝ
-device_f=$(cat $work_dir/bin/ddevice/device_f.txt 2>/dev/null)
+device_f=$(cat $work_dir/bin/ddevice/device_f.txt 2>/dev/null | tr -d '\r\n')
 if [[ -z "$device_f" || "$device_f" == "missi" ]]; then
-    device_f=$(cat $work_dir/bin/ddevice/device_code.txt 2>/dev/null)
+    device_f=$(cat $work_dir/bin/ddevice/device_code.txt 2>/dev/null | tr -d '\r\n')
 fi
 device_code="$device_f"
 
-if [[ $(git branch --show-current) == "beta" ]]; then
-    polyxver="$(cat Version)"
+if [[ $(git branch --show-current 2>/dev/null) == "beta" ]]; then
+    polyxver="$(cat Version 2>/dev/null | tr -d '\r\n')"
     status="Development"
 else
-    polyxver="$(cat Version)"
+    polyxver="$(cat Version 2>/dev/null | tr -d '\r\n')"
     status="Official"
 fi
 
@@ -69,15 +70,14 @@ mkdir -p "$target_out_dir/META-INF/Data"
 echo "$device_f" > "$target_out_dir/META-INF/Data/DeviceCode"
 repack "Done"
 
+# Định dạng tên file: BugOS_<codename>_<phiên bản os>_<ngày tháng năm>.zip
+build_date=$(TZ=Asia/Ho_Chi_Minh date +%d%m%Y)
+final_zip_name="BugOS_${device_code}_${base_rom_code}_${build_date}.zip"
+
 find "$target_out_dir" | xargs touch
 pushd "$target_out_dir/" || exit
-zip -r "${os_type}_${device_f}_${base_rom_code}.zip" ./*
-mv "${os_type}_${device_f}_${base_rom_code}.zip" ../
+zip -r "$work_dir/out/$final_zip_name" ./*
 popd || exit
-
-hash=$(md5sum "out/${os_type}_${device_f}_${base_rom_code}.zip" | head -c 5)
-final_zip_name="${os_type}_${polyxver}_${device_f}_${base_rom_code}_${hash}_${status}.zip"
-mv "out/${os_type}_${device_f}_${base_rom_code}.zip" "out/$final_zip_name"
 
 repack "Build completed"
 repack "Output: $(pwd)/out/$final_zip_name"

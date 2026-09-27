@@ -157,22 +157,27 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
     links = []
     if is_available(rom_link):
         links.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
-    if is_available(run_url):
-        links.append(f"📋 <a href='{html_esc(run_url)}'>Log Actions</a>")
+        
+    links = []
+    if is_available(rom_link):
+        links.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
     links_block = "  ·  ".join(links)
 
     lines = [
         "<b>BugOS</b> · ROM Builder",
+        f"{html_esc(version_tool)}",
         "",
         f"<blockquote>{device_block}</blockquote>",
         "",
         f"{icon} <b>{title}</b>",
         f"{progress_block}<i>{html_esc(hint)}</i>",
         "",
-        f"{html_esc(version_tool)}",
-        f"🆔 <code>{html_esc(build_id)}</code>  ·  🕐 {get_time_vn()}",
-        links_block,
+        f"🆔 <code>{html_esc(build_id)}</code>",
+        f"🕐 {get_time_vn()}",
     ]
+
+    if links_block:
+        lines.append(links_block)
 
     return "\n".join(lines)
 

@@ -13,8 +13,6 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-      ARCHIVE_ACCESS_KEY: ${{ secrets.ARCHIVE_ACCESS_KEY }}
-      ARCHIVE_SECRET_KEY: ${{ secrets.ARCHIVE_SECRET_KEY }}
       BUILDER_NAME: "iabi"
       BUILDER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
     steps:
@@ -48,7 +46,7 @@ jobs:
 
       - name: Start Notify
         run: |
-          pip install requests internetarchive
+          pip install requests
           python notify.py start "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
 
       - name: Set up Time
@@ -86,49 +84,49 @@ jobs:
           python notify.py upload "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
           sudo -E bash uploadROM.sh
 
-      - name: Upload ROM to Archive.org
+      - name: Upload ROM to Gofile.io
         if: success()
         run: |
           export ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
           
-          # Dùng ký tự '|' để giữ chuẩn form YAML, sau đó cắt bỏ '|' đi để lưu thành file upload.py hoàn chỉnh
-          cat << 'EOF' | sed 's/^|//' > upload_archive.py
+          cat << 'EOF' | sed 's/^|//' > upload_gofile.py
           |import os
-          |import internetarchive
+          |import requests
           |
           |rom_zip_path = os.environ.get("ROM_ZIP_PATH", "")
-          |build_id = os.environ.get("TELEGRAM_BUILD_ID", "unknown")
-          |access_key = os.environ.get("ARCHIVE_ACCESS_KEY", "")
-          |secret_key = os.environ.get("ARCHIVE_SECRET_KEY", "")
           |
           |if not rom_zip_path or not os.path.exists(rom_zip_path):
           |    print("Lỗi: Không tìm thấy file ROM zip để upload.")
           |    exit(0)
           |
           |file_name = os.path.basename(rom_zip_path)
-          |identifier = f"bugos_rom_{build_id}".lower()
+          |print(f"Đang lấy server Gofile tốt nhất...")
           |
-          |print(f"Đang upload {file_name} lên archive.org với định danh: {identifier}...")
           |try:
-          |    internetarchive.upload(
-          |        identifier,
-          |        files=[rom_zip_path],
-          |        access_key=access_key,
-          |        secret_key=secret_key,
-          |        metadata={"title": f"BugOS ROM Build {build_id}", "mediatype": "software"},
-          |        retries=3,
-          |    )
-          |    download_link = f"https://archive.org/download/{identifier}/{file_name}"
-          |    print(f"Upload thành công! Link tải: {download_link}")
+          |    server_res = requests.get("https://api.gofile.io/servers").json()
+          |    server_name = server_res["data"]["servers"][0]["name"]
+          |    print(f"Đã chọn server: {server_name}. Bắt đầu upload {file_name}...")
           |
-          |    with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-          |        f.write(f"ARCHIVE_LINK={download_link}\n")
+          |    with open(rom_zip_path, "rb") as f:
+          |        upload_res = requests.post(
+          |            f"https://{server_name}.gofile.io/contents/uploadfile",
+          |            files={"file": f}
+          |        ).json()
+          |
+          |    if upload_res["status"] == "ok":
+          |        download_link = upload_res["data"]["downloadPage"]
+          |        print(f"Upload thành công! Link tải: {download_link}")
+          |
+          |        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+          |            env_file.write(f"DOWNLOAD_LINK={download_link}\n")
+          |    else:
+          |        print(f"Lỗi Gofile API: {upload_res}")
+          |
           |except Exception as e:
-          |    print(f"Lỗi khi upload lên Archive: {e}")
+          |    print(f"Quá trình upload thất bại: {e}")
           EOF
           
-          # Tiến hành chạy file Python vừa được tạo
-          python3 upload_archive.py
+          python3 upload_gofile.py
 
       - name: Success Notification
         if: success()
@@ -144,4 +142,3 @@ jobs:
         if: always()
         run: |
           sudo rm -rf out build
-          

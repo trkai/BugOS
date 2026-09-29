@@ -1,12 +1,35 @@
 work_dir=$(pwd)
 [ -f "$work_dir/functions.sh" ] && source "$work_dir/functions.sh"
 
-# Lấy DEVICE_CODENAME an toàn tuyệt đối bằng -exec và head
-DEVICE_CODENAME=$(find . -type f -name "*.prop" -exec grep -m1 "^ro.product.device=" {} + | head -n1 | cut -d = -f2 | tr -d '\r\n')
+# ---> SỬA LỖI LẤY NHẦM 'MISSI' <---
+DEVICE_CODENAME=""
 
-if [ -z "$DEVICE_CODENAME" ]; then
-    DEVICE_CODENAME=$(find . -type f -name "*.prop" -exec grep -m1 "^ro.build.product=" {} + | head -n1 | cut -d = -f2 | tr -d '\r\n')
+# 1. Đọc từ file định danh của tool trước (chuẩn nhất)
+if [ -f "$work_dir/bin/ddevice/device_code.txt" ]; then
+    DEVICE_CODENAME="$(cat "$work_dir/bin/ddevice/device_code.txt" | tr -d '\r\n ')"
+elif [ -f "$work_dir/bin/ddevice/device_model.txt" ]; then
+    DEVICE_CODENAME="$(cat "$work_dir/bin/ddevice/device_model.txt" | tr -d '\r\n ')"
 fi
+
+# 2. Nếu trống hoặc dính 'missi', đọc từ file prop cụ thể (tránh quét lung tung bằng find)
+if [ -z "$DEVICE_CODENAME" ] || [ "$DEVICE_CODENAME" = "missi" ]; then
+    for prop in \
+        "$work_dir/build/baserom/images/product/etc/build.prop" \
+        "$work_dir/build/baserom/images/vendor/build.prop" \
+        "$work_dir/build/baserom/images/system/system/build.prop"; do
+        if [ -f "$prop" ]; then
+            val=$(grep -E "^(ro\.product\.product\.device|ro\.product\.vendor\.device|ro\.product\.device)=" "$prop" | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ')
+            if [ -n "$val" ] && [ "$val" != "missi" ]; then
+                DEVICE_CODENAME="$val"
+                break
+            fi
+        fi
+    done
+fi
+
+[ -z "$DEVICE_CODENAME" ] && DEVICE_CODENAME="unknown"
+[ "$DEVICE_CODENAME" = "missi" ] && DEVICE_CODENAME="unknown"
+# ---> KẾT THÚC SỬA LỖI <---
 
 echo "Current device codename: $DEVICE_CODENAME"
 

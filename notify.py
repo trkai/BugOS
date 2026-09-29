@@ -6,7 +6,6 @@ import random
 import string
 from datetime import datetime, timezone, timedelta
 
-# Đảm bảo mã hóa UTF-8 cho stdout và stderr
 if hasattr(sys.stdout, 'reconfigure'):
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -18,7 +17,6 @@ if hasattr(sys.stderr, 'reconfigure'):
     except Exception:
         pass
 
-
 def read_file_if_exists(path, default=""):
     if os.path.exists(path):
         try:
@@ -29,7 +27,6 @@ def read_file_if_exists(path, default=""):
             return default
     return default
 
-
 def is_available(value):
     if not value:
         return False
@@ -38,9 +35,7 @@ def is_available(value):
         return False
     return True
 
-
 def get_prop_value(prop_path, key, default=""):
-    """Đọc trực tiếp 1 property từ file build.prop"""
     if not os.path.exists(prop_path):
         return default
     try:
@@ -54,7 +49,6 @@ def get_prop_value(prop_path, key, default=""):
         pass
     return default
 
-
 def html_esc(text):
     if text is None:
         return ""
@@ -63,7 +57,6 @@ def html_esc(text):
             .replace("<", "&lt;")
             .replace(">", "&gt;")
             .replace('"', "&quot;"))
-
 
 def bar_for(pct):
     try:
@@ -74,11 +67,9 @@ def bar_for(pct):
     n = max(0, min(10, n))
     return "▬" * n + "▭" * (10 - n)
 
-
 def get_time_vn():
     vn_tz = timezone(timedelta(hours=7))
     return datetime.now(vn_tz).strftime("%H:%M · %d/%m/%Y")
-
 
 STATUS_MAP = {
     "start":    (8,   "⏳", "Khởi động pipeline",  "Dọn môi trường, cài toolchain…"),
@@ -86,11 +77,10 @@ STATUS_MAP = {
     "unpack":   (35,  "📂", "Đang giải nén ROM",    "Unpacking partitions…"),
     "build":    (55,  "🔨", "Đang biên dịch ROM",   "Đang chạy build.sh"),
     "pack":     (78,  "📦", "Đang đóng gói",        "Đang chạy packROM.sh"),
-    "upload":   (94,  "☁️", "Đang tải lên",          "Upload file ROM…"),
+    "upload":   (94,  "☁️", "Đang tải lên Gofile",   "Upload file ROM…"),
     "success":  (100, "✅", "Hoàn tất",              "ROM đã sẵn sàng để tải về."),
     "fail":     (0,   "❌", "Build thất bại",       "Pipeline dừng. Mở log để xem lỗi."),
 }
-
 
 def build_message(status, rom_link, build_id, builder_name, run_url=""):
     status_l = status.lower()
@@ -105,7 +95,6 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
     if not codename:
         codename = get_prop_value(system_prop, "ro.product.device", "").upper()
 
-    # Hỗ trợ đọc thêm từ folder bin/device/ dạng dòng
     if not codename:
         device_dir = "bin/device"
         if os.path.exists(device_dir):
@@ -160,7 +149,7 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
         links.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
     links_block = "  ·  ".join(links)
 
-    # ----- ID chỉ hiện số (bỏ prefix như "xiaomi_") -----
+    # ----- ID chỉ hiện số -----
     build_id_show = str(build_id).split("_")[-1]
 
     lines = [
@@ -183,7 +172,7 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
 
 
 def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id=None,
-                      build_id="Unknown", builder_name="", builder_id="", archive_link=""):
+                      build_id="Unknown", builder_name="", builder_id="", download_link=""):
     is_success = status.lower() == 'success'
 
     run_url = ""
@@ -198,19 +187,15 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
-    # ----- XỬ LÝ NÚT BẤM (CHỈ TẢI ROM HOẶC LOG) -----
+    # ----- CHỈ GIỮ NÚT TẢI ROM (NẾU THÀNH CÔNG) VÀ NÚT LOG (NẾU LỖI) -----
     buttons = []
-    
     if is_success:
-        # Khi Build thành công (100%): Chỉ hiện nút Tải ROM nếu biến archive_link có dữ liệu
-        if is_available(archive_link):
-            buttons.append([{"text": "⬇️ Tải ROM", "url": archive_link}])
+        if is_available(download_link):
+            buttons.append([{"text": "⬇️ Tải ROM", "url": download_link}])
     elif status.lower() == "fail":
-        # Khi Build thất bại: Hiện nút Mở log
         if is_available(run_url):
             buttons.append([{"text": "Mở log GitHub Actions", "url": run_url}])
-
-    # Nếu có nút bấm thì mới thêm vào payload gửi đi
+            
     if len(buttons) > 0:
         payload["reply_markup"] = json.dumps({"inline_keyboard": buttons})
 
@@ -235,10 +220,41 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         res_data = response.json()
         new_msg_id = res_data.get('result', {}).get('message_id')
 
-        # Lưu lại Message ID để edit thanh tiến trình
         if not is_success and not use_msg_id and new_msg_id and "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_MSG_ID={new_msg_id}\n")
 
     except Exception as e:
         print(f"Lỗi khi gửi thông báo: {e}")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        sys.exit(1)
+
+    status = sys.argv[1]
+    repo_name = sys.argv[2]
+    rom_link = sys.argv[3]
+    prefix = sys.argv[4] if len(sys.argv) > 4 else "build"
+    builder_name = sys.argv[5] if len(sys.argv) > 5 else ""
+    builder_id = sys.argv[6] if len(sys.argv) > 6 else ""
+
+    download_link = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else os.environ.get("DOWNLOAD_LINK", "")
+    rom_zip_path = sys.argv[8] if len(sys.argv) > 8 and sys.argv[8] else os.environ.get("ROM_ZIP_PATH", "")
+
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    channel_id = os.environ.get("TELEGRAM_CHANNEL_ID")
+    msg_id = os.environ.get("TELEGRAM_MSG_ID")
+    build_id = os.environ.get("TELEGRAM_BUILD_ID")
+
+    if not build_id:
+        random_digits = ''.join(random.choices(string.digits, k=8))
+        build_id = f"{prefix}_{random_digits}"
+        if "GITHUB_ENV" in os.environ:
+            with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+                f.write(f"TELEGRAM_BUILD_ID={build_id}\n")
+
+    if not bot_token:
+        sys.exit(1)
+
+    send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id, build_id, builder_name, builder_id, download_link)

@@ -270,5 +270,41 @@ else
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.build\.display\.id=.*/ro.build.display.id=BugOS 1.1/g" {} +
 fi
 
+# ----> BYPASS VNEID E012 & BANKING APPS <----
+info "Đang giả mạo prop để ẩn Custom ROM (Bypass VNeID/Banking)..."
+
+# Tìm và thay thế trên toàn bộ file .prop trong phân vùng
+find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
+    
+    # 1. Chuyển đổi mã test-keys (Custom) thành release-keys (Official)
+    sed -i 's/test-keys/release-keys/g' "$f"
+    
+    # 2. Xóa các biến dễ bị phát hiện ra Custom/Unlocked
+    sed -i \
+        -e '/^ro\.build\.type=/d' \
+        -e '/^ro\.debuggable=/d' \
+        -e '/^ro\.secure=/d' \
+        -e '/^ro\.boot\.flash\.locked=/d' \
+        -e '/^ro\.boot\.vbmeta\.device_state=/d' \
+        -e '/^ro\.boot\.verifiedbootstate=/d' \
+        -e '/^ro\.boot\.warranty_bit=/d' \
+        -e '/^ro\.warranty_bit=/d' "$f"
+
+    # 3. Bơm lại các biến sạch (Giả lập Bootloader Locked & ROM Official)
+    {
+        echo "ro.build.type=user"
+        echo "ro.debuggable=0"
+        echo "ro.secure=1"
+        echo "ro.boot.flash.locked=1"
+        echo "ro.boot.vbmeta.device_state=locked"
+        echo "ro.boot.verifiedbootstate=green"
+        echo "ro.boot.warranty_bit=0"
+        echo "ro.warranty_bit=0"
+    } >> "$f"
+
+done
+
+info "Hoàn tất ẩn prop bypass VNeID!"
+
 find "$work_dir/build/baserom/images/" -exec touch -t 200901010000.00 {} + 2> /dev/null || true
 

@@ -86,6 +86,8 @@ jobs:
 
       - name: Upload ROM to Gofile.io
         if: success()
+        env:
+          GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
         run: |
           export ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
           
@@ -94,36 +96,47 @@ jobs:
           |import requests
           |
           |rom_zip_path = os.environ.get("ROM_ZIP_PATH", "")
+          |token = os.environ.get("GOFILE_TOKEN", "")
           |
           |if not rom_zip_path or not os.path.exists(rom_zip_path):
           |    print("Lỗi: Không tìm thấy file ROM zip để upload.")
           |    exit(0)
           |
+          |if not token:
+          |    print("Cảnh báo: Không có GOFILE_TOKEN. Quá trình upload có thể bị từ chối...")
+          |
           |file_name = os.path.basename(rom_zip_path)
           |print(f"Đang lấy server Gofile tốt nhất...")
           |
           |try:
+          |    # 1. Gọi API lấy server khả dụng
           |    server_res = requests.get("https://api.gofile.io/servers").json()
+          |    if server_res.get("status") != "ok":
+          |        print(f"Lỗi lấy server: {server_res}")
+          |        exit(1)
+          |        
           |    server_name = server_res["data"]["servers"][0]["name"]
           |    print(f"Đã chọn server: {server_name}. Bắt đầu upload {file_name}...")
           |
+          |    # 2. Upload file kèm token
+          |    url = f"https://{server_name}.gofile.io/contents/uploadfile"
           |    with open(rom_zip_path, "rb") as f:
-          |        upload_res = requests.post(
-          |            f"https://{server_name}.gofile.io/contents/uploadfile",
-          |            files={"file": f}
-          |        ).json()
+          |        files = {"file": f}
+          |        data = {"token": token} if token else {}
+          |        upload_res = requests.post(url, files=files, data=data).json()
           |
-          |    if upload_res["status"] == "ok":
+          |    if upload_res.get("status") == "ok":
           |        download_link = upload_res["data"]["downloadPage"]
           |        print(f"Upload thành công! Link tải: {download_link}")
           |
+          |        # Lưu link vào biến môi trường cho Telegram Bot
           |        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
           |            env_file.write(f"DOWNLOAD_LINK={download_link}\n")
           |    else:
-          |        print(f"Lỗi Gofile API: {upload_res}")
+          |        print(f"Lỗi Gofile API trả về: {upload_res}")
           |
           |except Exception as e:
-          |    print(f"Quá trình upload thất bại: {e}")
+          |    print(f"Quá trình upload thất bại do ngoại lệ: {e}")
           EOF
           
           python3 upload_gofile.py

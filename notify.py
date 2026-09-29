@@ -72,7 +72,7 @@ def bar_for(pct):
         pct = 0
     n = (pct + 5) // 10
     n = max(0, min(10, n))
-    return "▰" * n + "▱" * (10 - n)
+    return "▬" * n + "▭" * (10 - n)
 
 
 def get_time_vn():
@@ -81,14 +81,14 @@ def get_time_vn():
 
 
 STATUS_MAP = {
-    "start":   (8,   "⏳", "Khởi động pipeline",  "Dọn môi trường, cài toolchain…"),
-    "download":(20,  "⬇️", "Đang tải ROM gốc",     "Downloading base ROM…"),
-    "unpack":  (35,  "📂", "Đang giải nén ROM",    "Unpacking partitions…"),
-    "build":   (55,  "🔨", "Đang biên dịch ROM",   "Đang chạy build.sh"),
-    "pack":    (78,  "📦", "Đang đóng gói",        "Đang chạy packROM.sh"),
-    "upload":  (94,  "☁️", "Đang tải lên",         "Upload file ROM…"),
-    "success": (100, "✅", "Hoàn tất",             "ROM đã sẵn sàng để tải về."),
-    "fail":    (0,   "❌", "Build thất bại",       "Pipeline dừng. Mở log để xem lỗi."),
+    "start":    (8,   "⏳", "Khởi động pipeline",  "Dọn môi trường, cài toolchain…"),
+    "download": (20,  "⬇️", "Đang tải ROM gốc",      "Downloading base ROM…"),
+    "unpack":   (35,  "📂", "Đang giải nén ROM",    "Unpacking partitions…"),
+    "build":    (55,  "🔨", "Đang biên dịch ROM",   "Đang chạy build.sh"),
+    "pack":     (78,  "📦", "Đang đóng gói",        "Đang chạy packROM.sh"),
+    "upload":   (94,  "☁️", "Đang tải lên",          "Upload file ROM…"),
+    "success":  (100, "✅", "Hoàn tất",              "ROM đã sẵn sàng để tải về."),
+    "fail":     (0,   "❌", "Build thất bại",       "Pipeline dừng. Mở log để xem lỗi."),
 }
 
 
@@ -97,32 +97,26 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
     pct, icon, title, hint = STATUS_MAP.get(status_l, (0, "ℹ️", status, ""))
 
     system_prop = "build/baserom/images/system/system/build.prop"
-    product_prop = "build/baserom/images/product/etc/build.prop"
 
-    # ----- 1. Tên Device (giữ nguyên logic gốc, ưu tiên name_devices.txt) -----
-    device_name = read_file_if_exists("bin/ddevice/name_devices.txt", "")
-    if device_name and "|" in device_name:
-        device_name = device_name.split("|")[0].strip()
-
-    if not device_name or device_name.lower() == "xiaomi device":
-        device_name = read_file_if_exists("bin/ddevice/device_name.txt", "")
-
-    if not device_name or device_name.lower() == "xiaomi device":
-        device_name = get_prop_value(product_prop, "ro.product.marketname",
-                        get_prop_value(system_prop, "ro.product.marketname", ""))
-
-    if not device_name:
-        device_name = get_prop_value(product_prop, "ro.product.model",
-                        get_prop_value(system_prop, "ro.product.model", ""))
-
-    # ----- 2. Codename -----
+    # ----- 1. Codename -----
     codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
     if not codename:
         codename = read_file_if_exists("bin/ddevice/device_model.txt").upper()
     if not codename:
         codename = get_prop_value(system_prop, "ro.product.device", "").upper()
 
-    # ----- 3. Hệ điều hành -----
+    # Hỗ trợ đọc thêm từ folder bin/device/ dạng dòng
+    if not codename:
+        device_dir = "bin/device"
+        if os.path.exists(device_dir):
+            for file in os.listdir(device_dir):
+                if file.endswith(".txt"):
+                    lines_ = [l.strip() for l in read_file_if_exists(os.path.join(device_dir, file)).split("\n") if l.strip()]
+                    if len(lines_) >= 2:
+                        codename = lines_[1].upper()
+                    break
+
+    # ----- 2. Phiên bản hệ điều hành (OS Version) -----
     rom_os = read_file_if_exists("bin/ddevice/rom_os.txt", "")
     base_rom_code = read_file_if_exists("bin/ddevice/base_rom_code.txt", "")
 
@@ -138,45 +132,58 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
         ver_inc = get_prop_value(system_prop, "ro.mi.os.version.incremental", "")
         xiaomi_version = display_id or (f"{os_name} ({ver_inc})" if os_name and ver_inc else os_name or ver_inc)
 
+    if not xiaomi_version:
+        device_dir = "bin/device"
+        if os.path.exists(device_dir):
+            for file in os.listdir(device_dir):
+                if file.endswith(".txt"):
+                    lines_ = [l.strip() for l in read_file_if_exists(os.path.join(device_dir, file)).split("\n") if l.strip()]
+                    if len(lines_) >= 3:
+                        xiaomi_version = lines_[2]
+                    break
+
     version_tool = "BugOS 1.1"
 
-    # ----- Khối device (dạng blockquote như mẫu) -----
-    device_pending = not device_name and not codename
-    if device_pending:
-        device_block = "Đang nhận diện thiết bị…"
+    # ----- Khối Codename & OS Version -----
+    if not codename and not xiaomi_version:
+        device_block = "Đang nhận diện bản dựng…"
     else:
-        device_name_show = device_name or "Xiaomi"
         codename_show = codename or "UNKNOWN"
         os_ver_show = xiaomi_version or "Đang đọc bản dựng…"
-        device_block = f"<b>{html_esc(device_name_show)}</b>\n<code>{html_esc(codename_show)}</code>  ·  {html_esc(os_ver_show)}"
+        device_block = f"<code>{html_esc(codename_show)}</code>  ·  {html_esc(os_ver_show)}"
 
     progress_block = "" if status_l == "fail" else f"<code>{bar_for(pct)}  {pct}%</code>\n"
 
+    # ----- Link nguồn ROM -----
     links = []
     if is_available(rom_link):
         links.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
-    if is_available(run_url):
-        links.append(f"📋 <a href='{html_esc(run_url)}'>Log Actions</a>")
     links_block = "  ·  ".join(links)
+
+    # ----- ID chỉ hiện số (bỏ prefix như "xiaomi_") -----
+    build_id_show = str(build_id).split("_")[-1]
 
     lines = [
         "<b>BugOS</b> · ROM Builder",
+        f"{html_esc(version_tool)}",
         "",
         f"<blockquote>{device_block}</blockquote>",
         "",
         f"{icon} <b>{title}</b>",
         f"{progress_block}<i>{html_esc(hint)}</i>",
         "",
-        f"{html_esc(version_tool)}",
-        f"🆔 <code>{html_esc(build_id)}</code>  ·  🕐 {get_time_vn()}",
-        links_block,
+        f"🆔 <code>{html_esc(build_id_show)}</code>",
+        f"🕐 {get_time_vn()}",
     ]
+
+    if links_block:
+        lines.append(links_block)
 
     return "\n".join(lines)
 
 
 def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id=None,
-                       build_id="Unknown", builder_name="", builder_id="", archive_link=""):
+                      build_id="Unknown", builder_name="", builder_id="", archive_link=""):
     is_success = status.lower() == 'success'
 
     run_url = ""
@@ -191,12 +198,12 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
+    # Chỉ giữ nút Tải ROM khi thành công, nút mở log khi thất bại
     if is_success:
-        buttons = []
         if is_available(archive_link):
-            buttons.append([{"text": "⬇️ Tải ROM", "url": archive_link}])
-        buttons.append([{"text": "✅ Duyệt & Gửi vào Nhóm", "callback_data": f"approve_rom_{build_id}"}])
-        payload["reply_markup"] = json.dumps({"inline_keyboard": buttons})
+            payload["reply_markup"] = json.dumps({
+                "inline_keyboard": [[{"text": "⬇️ Tải ROM", "url": archive_link}]]
+            })
     elif status.lower() == "fail" and is_available(run_url):
         payload["reply_markup"] = json.dumps({
             "inline_keyboard": [[{"text": "Mở log GitHub Actions", "url": run_url}]]

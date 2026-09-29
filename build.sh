@@ -205,7 +205,29 @@ bash $work_dir/bin/modfile/UpdateFile/insupdate.sh
 bash $work_dir/bin/package/patchpackage.sh
 
 # ----> ĐIỀU KIỆN ÁP DỤNG ĐỊNH DANH VÀ BẢN QUYỀN <----
-CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_f.txt 2>/dev/null)"
+# Đọc ưu tiên theo thứ tự các file định danh máy thật
+CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_code.txt 2>/dev/null)"
+[ -z "$CURRENT_CODENAME" ] && CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_model.txt 2>/dev/null)"
+[ -z "$CURRENT_CODENAME" ] && CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_f.txt 2>/dev/null)"
+
+# Nếu vẫn trống hoặc dính chữ 'missi', đọc từ build.prop của product / vendor
+if [ -z "$CURRENT_CODENAME" ] || [ "$CURRENT_CODENAME" = "missi" ]; then
+    for prop in \
+        "$work_dir/build/baserom/images/product/etc/build.prop" \
+        "$work_dir/build/baserom/images/vendor/build.prop" \
+        "$work_dir/build/baserom/images/system/system/build.prop"; do
+        if [ -f "$prop" ]; then
+            val=$(grep -E "^(ro\.product\.product\.device|ro\.product\.vendor\.device|ro\.product\.device)=" "$prop" | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ')
+            if [ -n "$val" ] && [ "$val" != "missi" ]; then
+                CURRENT_CODENAME="$val"
+                break
+            fi
+        fi
+    done
+fi
+
+# Chuyển về chữ thường để so sánh regex chính xác
+CURRENT_CODENAME="$(echo "$CURRENT_CODENAME" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
 
 if [[ "$CURRENT_CODENAME" =~ (pudding|pandora|popsicle|nezha) ]]; then
     info "Thiết bị thuộc Xiaomi 17 Series ($CURRENT_CODENAME): Giữ nguyên toàn bộ HyperOS/MIUI và version prop gốc để tránh lỗi camera."

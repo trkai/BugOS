@@ -72,7 +72,7 @@ def bar_for(pct):
         pct = 0
     n = (pct + 5) // 10
     n = max(0, min(10, n))
-    return "▰" * n + "▱" * (10 - n)
+    return "▬" * n + "▭" * (10 - n)
 
 
 def get_time_vn():
@@ -105,15 +105,15 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
     if not codename:
         codename = get_prop_value(system_prop, "ro.product.device", "").upper()
 
-    # Hỗ trợ đọc thêm từ folder bin/device/ dạng dòng như code mới
+    # Hỗ trợ đọc thêm từ folder bin/device/ dạng dòng
     if not codename:
         device_dir = "bin/device"
         if os.path.exists(device_dir):
             for file in os.listdir(device_dir):
                 if file.endswith(".txt"):
-                    lines = [l.strip() for l in read_file_if_exists(os.path.join(device_dir, file)).split("\n") if l.strip()]
-                    if len(lines) >= 2:
-                        codename = lines[1].upper()
+                    lines_ = [l.strip() for l in read_file_if_exists(os.path.join(device_dir, file)).split("\n") if l.strip()]
+                    if len(lines_) >= 2:
+                        codename = lines_[1].upper()
                     break
 
     # ----- 2. Phiên bản hệ điều hành (OS Version) -----
@@ -137,14 +137,14 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
         if os.path.exists(device_dir):
             for file in os.listdir(device_dir):
                 if file.endswith(".txt"):
-                    lines = [l.strip() for l in read_file_if_exists(os.path.join(device_dir, file)).split("\n") if l.strip()]
-                    if len(lines) >= 3:
-                        xiaomi_version = lines[2]
+                    lines_ = [l.strip() for l in read_file_if_exists(os.path.join(device_dir, file)).split("\n") if l.strip()]
+                    if len(lines_) >= 3:
+                        xiaomi_version = lines_[2]
                     break
 
     version_tool = "BugOS 1.1"
 
-    # ----- Khối Codename & OS Version (đã lược bỏ Device name) -----
+    # ----- Khối Codename & OS Version -----
     if not codename and not xiaomi_version:
         device_block = "Đang nhận diện bản dựng…"
     else:
@@ -154,14 +154,14 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
 
     progress_block = "" if status_l == "fail" else f"<code>{bar_for(pct)}  {pct}%</code>\n"
 
-    links = []
-    if is_available(rom_link):
-        links.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
-        
+    # ----- Link nguồn ROM -----
     links = []
     if is_available(rom_link):
         links.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
     links_block = "  ·  ".join(links)
+
+    # ----- ID chỉ hiện số (bỏ prefix như "xiaomi_") -----
+    build_id_show = str(build_id).split("_")[-1]
 
     lines = [
         "<b>BugOS</b> · ROM Builder",
@@ -172,7 +172,7 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
         f"{icon} <b>{title}</b>",
         f"{progress_block}<i>{html_esc(hint)}</i>",
         "",
-        f"🆔 <code>{html_esc(build_id)}</code>",
+        f"🆔 <code>{html_esc(build_id_show)}</code>",
         f"🕐 {get_time_vn()}",
     ]
 
@@ -198,12 +198,12 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
+    # Chỉ giữ nút Tải ROM khi thành công, nút mở log khi thất bại
     if is_success:
-        buttons = []
         if is_available(archive_link):
-            buttons.append([{"text": "⬇️ Tải ROM", "url": archive_link}])
-        buttons.append([{"text": "✅ Duyệt & Gửi vào Nhóm", "callback_data": f"approve_rom_{build_id}"}])
-        payload["reply_markup"] = json.dumps({"inline_keyboard": buttons})
+            payload["reply_markup"] = json.dumps({
+                "inline_keyboard": [[{"text": "⬇️ Tải ROM", "url": archive_link}]]
+            })
     elif status.lower() == "fail" and is_available(run_url):
         payload["reply_markup"] = json.dumps({
             "inline_keyboard": [[{"text": "Mở log GitHub Actions", "url": run_url}]]

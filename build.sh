@@ -233,14 +233,41 @@ if [[ "$CURRENT_CODENAME" =~ (pudding|pandora|popsicle|nezha) ]]; then
     info "Thiết bị thuộc Xiaomi 17 Series ($CURRENT_CODENAME): Giữ nguyên toàn bộ HyperOS/MIUI và version prop gốc để tránh lỗi camera."
 else
 
-    # ----> ĐÓNG DẤU BẢN QUYỀN BugOS <----
-    info "Đang đóng dấu bản quyền BugOS..."
-	find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/MIUINT/MIUI/g' {} +
+    # ----> ĐÓNG DẤU BẢN QUYỀN BugOS (HIỂN THỊ DƯỚI LOGO HYPEROS) <----
+    info "Đang thiết lập hiển thị BugOS 1.1 và khôi phục mã build gốc..."
+
+    # 1. Dọn sạch tên mod bên thứ 3 cũ (nếu có)
+    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/MIUINT/MIUI/g' {} +
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/HyperNT/HyperOS/g' {} +
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/^ro.build.display.id=.*/ro.build.display.id=BugOS 1.1/g' {} +
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/^ro.build.version.incremental=.*/ro.build.version.incremental=BugOS 1.1/g' {} +
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/^ro.mi.os.version.name=.*/ro.mi.os.version.name=BugOS 1.1/g' {} +
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/^ro.mi.os.version.incremental=.*/ro.mi.os.version.incremental=BugOS 1.1/g' {} +
+
+    # 2. Lấy mã build gốc (incremental) để tránh lỗi hệ thống
+    ORIGINAL_INC=""
+    if [ -f "$work_dir/bin/ddevice/base_rom_code.txt" ]; then
+        ORIGINAL_INC="$(head -n 1 "$work_dir/bin/ddevice/base_rom_code.txt" | tr -d '\r\n ')"
+    fi
+
+    if [ -z "$ORIGINAL_INC" ]; then
+        for prop in \
+            "$work_dir/build/baserom/images/system/system/build.prop" \
+            "$work_dir/build/baserom/images/product/etc/build.prop"; do
+            if [ -f "$prop" ]; then
+                ORIGINAL_INC=$(grep -E "^(ro\.system\.build\.version\.incremental|ro\.build\.version\.incremental)=" "$prop" | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ')
+                [ -n "$ORIGINAL_INC" ] && break
+            fi
+        done
+    fi
+
+    # Fallback nếu không quét được
+    [ -z "$ORIGINAL_INC" ] && ORIGINAL_INC="OS3.0.1.0.WPKCNXM"
+
+    # 3. Giữ nguyên 100% mã build gốc cho hệ thống kiểm tra tính toàn vẹn
+    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.build\.version\.incremental=.*/ro.build.version.incremental=$ORIGINAL_INC/g" {} +
+    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.system\.build\.version\.incremental=.*/ro.system.build.version.incremental=$ORIGINAL_INC/g" {} +
+    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.mi\.os\.version\.incremental=.*/ro.mi.os.version.incremental=$ORIGINAL_INC/g" {} +
+
+    # 4. Ép dòng phụ ngay dưới chữ Xiaomi HyperOS thành "BugOS 1.1"
+    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.mi\.os\.version\.name=.*/ro.mi.os.version.name=BugOS 1.1/g" {} +
+    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.build\.display\.id=.*/ro.build.display.id=BugOS 1.1/g" {} +
 fi
 
 find "$work_dir/build/baserom/images/" -exec touch -t 200901010000.00 {} + 2> /dev/null || true

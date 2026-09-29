@@ -198,16 +198,21 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         "disable_web_page_preview": True
     }
 
-    # Chỉ giữ nút Tải ROM khi thành công, nút mở log khi thất bại
+    # ----- XỬ LÝ NÚT BẤM (CHỈ TẢI ROM HOẶC LOG) -----
+    buttons = []
+    
     if is_success:
+        # Khi Build thành công (100%): Chỉ hiện nút Tải ROM nếu biến archive_link có dữ liệu
         if is_available(archive_link):
-            payload["reply_markup"] = json.dumps({
-                "inline_keyboard": [[{"text": "⬇️ Tải ROM", "url": archive_link}]]
-            })
-    elif status.lower() == "fail" and is_available(run_url):
-        payload["reply_markup"] = json.dumps({
-            "inline_keyboard": [[{"text": "Mở log GitHub Actions", "url": run_url}]]
-        })
+            buttons.append([{"text": "⬇️ Tải ROM", "url": archive_link}])
+    elif status.lower() == "fail":
+        # Khi Build thất bại: Hiện nút Mở log
+        if is_available(run_url):
+            buttons.append([{"text": "Mở log GitHub Actions", "url": run_url}])
+
+    # Nếu có nút bấm thì mới thêm vào payload gửi đi
+    if len(buttons) > 0:
+        payload["reply_markup"] = json.dumps({"inline_keyboard": buttons})
 
     target_chat_id = builder_id if is_available(builder_id) else channel_id
     use_msg_id = None if is_success else msg_id
@@ -230,52 +235,10 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
         res_data = response.json()
         new_msg_id = res_data.get('result', {}).get('message_id')
 
+        # Lưu lại Message ID để edit thanh tiến trình
         if not is_success and not use_msg_id and new_msg_id and "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_MSG_ID={new_msg_id}\n")
 
     except Exception as e:
         print(f"Lỗi khi gửi thông báo: {e}")
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        sys.exit(1)
-
-    status = sys.argv[1]
-    repo_name = sys.argv[2]
-    rom_link = sys.argv[3]
-    prefix = sys.argv[4] if len(sys.argv) > 4 else "build"
-    builder_name = sys.argv[5] if len(sys.argv) > 5 else ""
-    builder_id = sys.argv[6] if len(sys.argv) > 6 else ""
-
-    archive_link = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else os.environ.get("ARCHIVE_LINK", "")
-    rom_zip_path = sys.argv[8] if len(sys.argv) > 8 and sys.argv[8] else os.environ.get("ROM_ZIP_PATH", "")
-
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    channel_id = os.environ.get("TELEGRAM_CHANNEL_ID")
-    msg_id = os.environ.get("TELEGRAM_MSG_ID")
-    build_id = os.environ.get("TELEGRAM_BUILD_ID")
-
-    if not build_id:
-        random_digits = ''.join(random.choices(string.digits, k=8))
-        build_id = f"{prefix}_{random_digits}"
-        if "GITHUB_ENV" in os.environ:
-            with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-                f.write(f"TELEGRAM_BUILD_ID={build_id}\n")
-
-    if not bot_token:
-        sys.exit(1)
-
-    if status.lower() == 'success' and not is_available(archive_link) and rom_zip_path:
-        if 'upload_to_archive' in globals():
-            uploaded_link = upload_to_archive(rom_zip_path, build_id)
-            if uploaded_link:
-                archive_link = uploaded_link
-                if "GITHUB_ENV" in os.environ:
-                    with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-                        f.write(f"ARCHIVE_LINK={uploaded_link}\n")
-        else:
-            print("Cảnh báo: Không tìm thấy hàm upload_to_archive(). Bỏ qua bước upload.")
-
-    send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id, build_id, builder_name, builder_id, archive_link)

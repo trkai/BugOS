@@ -233,78 +233,40 @@ if [[ "$CURRENT_CODENAME" =~ (pudding|pandora|popsicle|nezha) ]]; then
     info "Thiết bị thuộc Xiaomi 17 Series ($CURRENT_CODENAME): Giữ nguyên toàn bộ HyperOS/MIUI và version prop gốc để tránh lỗi camera."
 else
 
-    # ----> ĐÓNG DẤU BẢN QUYỀN BugOS (HIỂN THỊ DƯỚI LOGO HYPEROS) <----
-    info "Đang thiết lập hiển thị BugOS 1.1 và khôi phục mã build gốc..."
+        # ----> ĐÓNG DẤU BẢN QUYỀN BugOS (FIX HIỂN THỊ CHỮ DƯỚI LOGO) <----
+    info "Đang thiết lập hiển thị BugOS 1.1..."
 
     # 1. Dọn sạch tên mod bên thứ 3 cũ (nếu có)
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/MIUINT/MIUI/g' {} +
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/HyperNT/HyperOS/g' {} +
 
-    # 2. Lấy mã build gốc (incremental) để tránh lỗi hệ thống
+    # 2. Lấy mã bản dựng gốc (VD: OS3.0.307.0.WPKCNXM)
     ORIGINAL_INC=""
     if [ -f "$work_dir/bin/ddevice/base_rom_code.txt" ]; then
         ORIGINAL_INC="$(head -n 1 "$work_dir/bin/ddevice/base_rom_code.txt" | tr -d '\r\n ')"
     fi
-
+    
     if [ -z "$ORIGINAL_INC" ]; then
         for prop in \
             "$work_dir/build/baserom/images/system/system/build.prop" \
             "$work_dir/build/baserom/images/product/etc/build.prop"; do
             if [ -f "$prop" ]; then
-                ORIGINAL_INC=$(grep -E "^(ro\.system\.build\.version\.incremental|ro\.build\.version\.incremental)=" "$prop" | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ')
+                ORIGINAL_INC=$(grep -E "^ro\.build\.version\.incremental=" "$prop" | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ')
                 [ -n "$ORIGINAL_INC" ] && break
             fi
         done
     fi
+    
+    # Đề phòng trường hợp không quét được mã gốc
+    [ -z "$ORIGINAL_INC" ] && ORIGINAL_INC="OS3.0"
 
-    # Fallback nếu không quét được
-    [ -z "$ORIGINAL_INC" ] && ORIGINAL_INC="OS3.0.1.0.WPKCNXM"
-
-    # 3. Giữ nguyên 100% mã build gốc cho hệ thống kiểm tra tính toàn vẹn
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.build\.version\.incremental=.*/ro.build.version.incremental=$ORIGINAL_INC/g" {} +
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.system\.build\.version\.incremental=.*/ro.system.build.version.incremental=$ORIGINAL_INC/g" {} +
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.mi\.os\.version\.incremental=.*/ro.mi.os.version.incremental=$ORIGINAL_INC/g" {} +
-
-    # 4. Ép dòng phụ ngay dưới chữ Xiaomi HyperOS thành "BugOS 1.1"
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.mi\.os\.version\.name=.*/ro.mi.os.version.name=BugOS 1.1/g" {} +
-    find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i "s/^ro\.build\.display\.id=.*/ro.build.display.id=BugOS 1.1/g" {} +
+    # 3. Kẹp BugOS 1.1 cùng với mã OS gốc vào display.id để app Cài đặt không bị ẩn khoảng trắng
+    find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
+        sed -i "s/^ro\.build\.display\.id=.*/ro.build.display.id=BugOS 1.1 | $ORIGINAL_INC/g" "$f"
+        # Dự phòng cho một số dòng máy mới dùng biến system
+        sed -i "s/^ro\.system\.build\.display\.id=.*/ro.system.build.display.id=BugOS 1.1 | $ORIGINAL_INC/g" "$f"
+    done
 fi
-
-# ----> BYPASS VNEID E012 & BANKING APPS <----
-info "Đang giả mạo prop để ẩn Custom ROM (Bypass VNeID/Banking)..."
-
-# Tìm và thay thế trên toàn bộ file .prop trong phân vùng
-find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
-    
-    # 1. Chuyển đổi mã test-keys (Custom) thành release-keys (Official)
-    sed -i 's/test-keys/release-keys/g' "$f"
-    
-    # 2. Xóa các biến dễ bị phát hiện ra Custom/Unlocked
-    sed -i \
-        -e '/^ro\.build\.type=/d' \
-        -e '/^ro\.debuggable=/d' \
-        -e '/^ro\.secure=/d' \
-        -e '/^ro\.boot\.flash\.locked=/d' \
-        -e '/^ro\.boot\.vbmeta\.device_state=/d' \
-        -e '/^ro\.boot\.verifiedbootstate=/d' \
-        -e '/^ro\.boot\.warranty_bit=/d' \
-        -e '/^ro\.warranty_bit=/d' "$f"
-
-    # 3. Bơm lại các biến sạch (Giả lập Bootloader Locked & ROM Official)
-    {
-        echo "ro.build.type=user"
-        echo "ro.debuggable=0"
-        echo "ro.secure=1"
-        echo "ro.boot.flash.locked=1"
-        echo "ro.boot.vbmeta.device_state=locked"
-        echo "ro.boot.verifiedbootstate=green"
-        echo "ro.boot.warranty_bit=0"
-        echo "ro.warranty_bit=0"
-    } >> "$f"
-
-done
-
-info "Hoàn tất ẩn prop bypass VNeID!"
 
 find "$work_dir/build/baserom/images/" -exec touch -t 200901010000.00 {} + 2> /dev/null || true
 

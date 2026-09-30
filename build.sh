@@ -1,3 +1,5 @@
+trap 'rc=$?; echo "[TRAP] build.sh kết thúc tại dòng $LINENO, mã thoát $rc"' EXIT
+
 baserom="$1"
 repo_name="$2"
 prefix_id="$3"
@@ -14,16 +16,16 @@ source $work_dir/functions.sh
 
 if [[ $(git branch --show-current) == "beta" ]]; then
     polyxver="$(cat Version)"
-	status="Development"
+    status="Development"
 else
     polyxver="$(cat Version)"
-	status="Official"
+    status="Official"
 fi
 
 # Fix lỗi cấu hình gói apt/dpkg và cài đặt các phụ thuộc cần thiết
 sudo dpkg --configure -a 2>/dev/null || true
 sudo apt-get update -y
-sudo apt-get install -y xmlstarlet aapt libc++1 libc++abi1 libsparse-tools
+sudo apt-get install -y xmlstarlet aapt libc++1 libc++abi1 libsparse-tools erofs-utils
 
 check unzip aria2c 7z zip java zipalign python3 zstd bc xmlstarlet aapt
 
@@ -48,6 +50,11 @@ if [[ ! -f "$baserom" ]]; then
             baserom="$clean_name"
         fi
     fi
+fi
+
+if [[ ! -f "$baserom" ]]; then
+    error "Không tìm thấy file ROM sau khi tải: $baserom"
+    exit 1
 fi
 # ================================================================
 
@@ -82,8 +89,23 @@ mkdir -p build/baserom/images/
 # Extract partitions
 if [[ ${baserom_type} == 'payload' ]]; then
     unpack "Unpacking payload.bin"
-    payload-extract extract -o build/baserom/images/ build/baserom/payload.bin >/dev/null 2>&1 || error "Unpacking payload.bin failed"    
-    
+    df -h /
+
+    # Lấy payload.bin ra khỏi file zip (nếu chưa có)
+    if [[ ! -f build/baserom/payload.bin ]]; then
+        unzip -o "${baserom}" payload.bin -d build/baserom/ || { error "Không giải nén được payload.bin từ zip"; exit 1; }
+    fi
+
+    payload-extract extract -o build/baserom/images/ build/baserom/payload.bin || { error "Unpacking payload.bin failed"; exit 1; }
+
+    # Giải phóng dung lượng ngay: zip gốc và payload.bin không cần nữa
+    rm -f build/baserom/payload.bin
+    rm -f "${baserom}"
+
+    echo "===== Sau khi payload-extract ====="
+    ls -la build/baserom/images/
+    df -h /
+
     # ---> FIX LỖI MẤT PHÂN VÙNG TRÊN PAYLOAD.BIN (A/B DEVICE) <---
     for i in build/baserom/images/*_a.img; do
         if [ -f "$i" ]; then
@@ -99,7 +121,7 @@ if [[ ${baserom_type} == 'payload' ]]; then
 elif [[ ${baserom_type} == 'br' ]]; then
     super_list=$(cat build/baserom/dynamic_partitions_op_list | grep "add " | awk '{ print $2 }')
     unpack "Unpacking new.dat.br"
-    for brotlipart in ${super_list}; do 
+    for brotlipart in ${super_list}; do
         brotli -d build/baserom/$brotlipart.new.dat.br >/dev/null 2>&1
         python3 $work_dir/bin/Linux/x86_64/sdat2img.py build/baserom/$brotlipart.transfer.list build/baserom/$brotlipart.new.dat build/baserom/images/$brotlipart.img >/dev/null 2>&1
         rm -rf build/baserom/$brotlipart.new.dat* build/baserom/$brotlipart.transfer.list build/baserom/$brotlipart.patch.*
@@ -107,7 +129,7 @@ elif [[ ${baserom_type} == 'br' ]]; then
 elif [[ ${is_base_rom_eu} == true ]]; then
     unpack "Extracting files from BASETROM [super.img]"
     unzip -q "${baserom}" '*super.img*' -d build/baserom/ || error "Extracting [super.img] error"
-    
+
     super_dir=$(dirname $(find build/baserom -name "*super.img.0*" | head -n 1))
     if [ -z "$super_dir" ]; then
         super_dir="build/baserom/images"
@@ -116,9 +138,9 @@ elif [[ ${is_base_rom_eu} == true ]]; then
     unpack "Merging super.img.* into super.img"
     SUPER_FILES=$(ls -v ${super_dir}/*super.img.*)
     if [ -x "/usr/bin/simg2img" ]; then
-    	/usr/bin/simg2img $SUPER_FILES build/baserom/super.img
+        /usr/bin/simg2img $SUPER_FILES build/baserom/super.img
     else
-    	simg2img $SUPER_FILES build/baserom/super.img
+        simg2img $SUPER_FILES build/baserom/super.img
     fi
 
     if [[ ! -s build/baserom/super.img ]]; then
@@ -138,20 +160,35 @@ elif [[ ${is_base_rom_eu} == true ]]; then
 
     unpack "Unpacking BASEROM [super.img]"
     python3 bin/lpunpack.py build/baserom/super.img build/baserom/images/ >/dev/null 2>&1
-    
+
     for i in build/baserom/images/*_a.img; do
         if [ -f "$i" ]; then
             mv "$i" "${i%_a.img}.img"
         fi
     done
-    
+
     super_list="system system_ext product vendor odm mi_ext"
 fi
 
 for part in ${super_list}; do
     if [ -f "$work_dir/build/baserom/images/${part}.img" ]; then
-        extract_partition $work_dir/build/baserom/images/${part}.img $work_dir/build/baserom/images
+        echo ">>> extract ${part}"
+        extract_partition $work_dir/build/baserom/images/${part}.img $work_dir/build/baserom/images || echo "!!! extract ${part} THẤT BẠI"
         PACK_TYPE=$(cat $work_dir/bin/ddevice/fstype.txt 2>/dev/null || echo "erofs")
+    else
+        echo "!!! không thấy ${part}.img"
+    fi
+done
+
+echo "===== Sau khi extract các partition ====="
+ls -la $work_dir/build/baserom/images/
+df -h /
+
+# Bắt buộc phải có các partition chính, nếu không thì dừng luôn (không "giả thành công")
+for must in vendor system product; do
+    if [ ! -d "$work_dir/build/baserom/images/$must" ] || [ -z "$(ls -A $work_dir/build/baserom/images/$must 2>/dev/null)" ]; then
+        error "Thiếu hoặc rỗng partition bắt buộc: $must (giải nén thất bại, xem log phía trên)"
+        exit 1
     fi
 done
 
@@ -164,8 +201,8 @@ elif [ -f "$work_dir/build/baserom/images/vendor/build.prop" ]; then
     detected_codename=$(grep -m1 "^ro.product.vendor.device=" "$work_dir/build/baserom/images/vendor/build.prop" | cut -d= -f2 | tr '[:upper:]' '[:lower:]')
 fi
 
-if [[ -z "$detected_codename" ]] || ! echo "$detected_codename" | grep -qE "^(peridot|onyx|garnet|corot|duchamp|manet|houji|shennong)$"; then
-    detected_codename=$(echo "$baserom" | grep -o -i -E "(peridot|onyx|garnet|corot|duchamp|manet|houji|shennong)" | head -n 1 | tr '[:upper:]' '[:lower:]')
+if [[ -z "$detected_codename" ]] || ! echo "$detected_codename" | grep -qE "^(peridot|onyx|garnet|corot|duchamp|manet|houji|shennong|annibale)$"; then
+    detected_codename=$(echo "$baserom" | grep -o -i -E "(peridot|onyx|garnet|corot|duchamp|manet|houji|shennong|annibale)" | head -n 1 | tr '[:upper:]' '[:lower:]')
 fi
 
 if [ -n "$detected_codename" ]; then
@@ -177,7 +214,6 @@ getvar=$(cat $work_dir/bin/ddevice/device_f.txt)
 # ===================================================================
 
 rm -rf config
-if [ -f "$baserom" ]; then rm -rf "$baserom"; fi
 rm -rf build/baserom/payload.bin build/baserom/super.img
 
 # Kỹ thuật ép tên: Làm sạch hậu tố NT/INT và ép về tên thương hiệu riêng
@@ -185,8 +221,8 @@ MY_BRAND_NAME="BugOS"
 echo "$MY_BRAND_NAME" > $work_dir/bin/ddevice/os_type.txt
 echo "$MY_BRAND_NAME" > $work_dir/bin/ddevice/brand.txt
 
-if [ ! -s "$work_dir/bin/ddevice/device_name.txt" ]; then 
-    echo "Xiaomi Device" > $work_dir/bin/ddevice/device_name.txt 
+if [ ! -s "$work_dir/bin/ddevice/device_name.txt" ]; then
+    echo "Xiaomi Device" > $work_dir/bin/ddevice/device_name.txt
 fi
 
 mods "Gathering Devices Infomations"
@@ -240,7 +276,7 @@ else
     if [ -f "$work_dir/bin/ddevice/base_rom_code.txt" ]; then
         ORIGINAL_INC="$(head -n 1 "$work_dir/bin/ddevice/base_rom_code.txt" | tr -d '\r\n ')"
     fi
-    
+
     if [ -z "$ORIGINAL_INC" ]; then
         for prop in \
             "$work_dir/build/baserom/images/system/system/build.prop" \
@@ -251,7 +287,7 @@ else
             fi
         done
     fi
-    
+
     [ -z "$ORIGINAL_INC" ] && ORIGINAL_INC="OS3.0"
 
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
@@ -271,10 +307,10 @@ find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f;
     sed -i "s/^ro\.product\.system\.model=.*/ro.product.system.model=$DEVICE_MARKET_NAME/g" "$f"
     sed -i "s/^ro\.product\.product\.model=.*/ro.product.product.model=$DEVICE_MARKET_NAME/g" "$f"
     sed -i "s/^ro\.product\.vendor\.model=.*/ro.product.vendor.model=$DEVICE_MARKET_NAME/g" "$f"
-    
+
     sed -i "/^ro\.product\.marketname=/d" "$f"
     echo "ro.product.marketname=$DEVICE_MARKET_NAME" >> "$f"
-    
+
     sed -i "/^ro\.market\.name=/d" "$f"
     echo "ro.market.name=$DEVICE_MARKET_NAME" >> "$f"
 done
@@ -309,20 +345,15 @@ info "Hoàn tất ẩn prop bypass VNeID!"
 # ----> FIX LỖI ĐÓNG GÓI REPACK (NHẬN DIỆN A/B DEVICE CHO HYPEROS 3) <----
 info "Đang đồng bộ lại prop để Pack ROM không bị lỗi..."
 
-# 1. Bắt buộc tạo thư mục vendor (đề phòng quá trình unpack bị hụt)
-mkdir -p "$work_dir/build/baserom/images/vendor"
-
-# 2. Xử lý file build.prop (HyperOS và Android 14 thường dời file này vào /etc/)
+# vendor đã được kiểm tra tồn tại ở trên, chỉ cần đảm bảo có build.prop và cờ A/B
 if [ ! -f "$work_dir/build/baserom/images/vendor/build.prop" ]; then
     if [ -f "$work_dir/build/baserom/images/vendor/etc/build.prop" ]; then
         cp "$work_dir/build/baserom/images/vendor/etc/build.prop" "$work_dir/build/baserom/images/vendor/build.prop"
     else
-        # 3. ÉP BUỘC (HARDCODE): Tự tạo file giả mạo nếu không tìm thấy để bypass lỗi A-only
         echo "ro.build.ab_update=true" > "$work_dir/build/baserom/images/vendor/build.prop"
     fi
 fi
 
-# 4. Đảm bảo chắc chắn cờ A/B update luôn được kích hoạt
 if ! grep -q "ro.build.ab_update=true" "$work_dir/build/baserom/images/vendor/build.prop"; then
     echo "ro.build.ab_update=true" >> "$work_dir/build/baserom/images/vendor/build.prop"
 fi

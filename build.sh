@@ -1,4 +1,4 @@
-Baserom="$1"
+baserom="$1"
 repo_name="$2"
 prefix_id="$3"
 builder_name="$4"

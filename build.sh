@@ -277,31 +277,21 @@ find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f;
     echo "ro.market.name=$DEVICE_MARKET_NAME" >> "$f"
 done
 
-# ----> BYPASS VNEID E012 & BANKING APPS <----
-info "Đang giả mạo prop để ẩn Custom ROM (Bypass VNeID/Banking)..."
-find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
-    sed -i 's/test-keys/release-keys/g' "$f"
-    sed -i \
-        -e '/^ro\.build\.type=/d' \
-        -e '/^ro\.debuggable=/d' \
-        -e '/^ro\.secure=/d' \
-        -e '/^ro\.boot\.flash\.locked=/d' \
-        -e '/^ro\.boot\.vbmeta\.device_state=/d' \
-        -e '/^ro\.boot\.verifiedbootstate=/d' \
-        -e '/^ro\.boot\.warranty_bit=/d' \
-        -e '/^ro\.warranty_bit=/d' "$f"
+# ----> FIX LỖI ĐÓNG GÓI REPACK (NHẬN DIỆN A/B DEVICE CHO HYPEROS 3) <----
+info "Đang sửa lỗi nhận diện A/B device cho trình đóng gói (Repack)..."
+mkdir -p "$work_dir/build/baserom/images/vendor"
 
-    {
-        echo "ro.build.type=user"
-        echo "ro.debuggable=0"
-        echo "ro.secure=1"
-        echo "ro.boot.flash.locked=1"
-        echo "ro.boot.vbmeta.device_state=locked"
-        echo "ro.boot.verifiedbootstate=green"
-        echo "ro.boot.warranty_bit=0"
-        echo "ro.warranty_bit=0"
-    } >> "$f"
-done
-info "Hoàn tất ẩn prop bypass VNeID!"
+if [ ! -f "$work_dir/build/baserom/images/vendor/build.prop" ]; then
+    if [ -f "$work_dir/build/baserom/images/vendor/etc/build.prop" ]; then
+        cp "$work_dir/build/baserom/images/vendor/etc/build.prop" "$work_dir/build/baserom/images/vendor/build.prop"
+    else
+        touch "$work_dir/build/baserom/images/vendor/build.prop"
+    fi
+fi
+
+if ! grep -q "ro.build.ab_update=true" "$work_dir/build/baserom/images/vendor/build.prop"; then
+    echo "ro.build.ab_update=true" >> "$work_dir/build/baserom/images/vendor/build.prop"
+fi
+info "Đã fix xong cấu hình A/B chuẩn bị cho quá trình Repack!"
 
 find "$work_dir/build/baserom/images/" -exec touch -t 200901010000.00 {} + 2> /dev/null || true

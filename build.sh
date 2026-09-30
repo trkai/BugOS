@@ -315,33 +315,6 @@ find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f;
     echo "ro.market.name=$DEVICE_MARKET_NAME" >> "$f"
 done
 
-# ----> BYPASS VNEID E012 & BANKING APPS <----
-info "Đang giả mạo prop để ẩn Custom ROM (Bypass VNeID/Banking)..."
-find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
-    sed -i 's/test-keys/release-keys/g' "$f"
-    sed -i \
-        -e '/^ro\.build\.type=/d' \
-        -e '/^ro\.debuggable=/d' \
-        -e '/^ro\.secure=/d' \
-        -e '/^ro\.boot\.flash\.locked=/d' \
-        -e '/^ro\.boot\.vbmeta\.device_state=/d' \
-        -e '/^ro\.boot\.verifiedbootstate=/d' \
-        -e '/^ro\.boot\.warranty_bit=/d' \
-        -e '/^ro\.warranty_bit=/d' "$f"
-
-    {
-        echo "ro.build.type=user"
-        echo "ro.debuggable=0"
-        echo "ro.secure=1"
-        echo "ro.boot.flash.locked=1"
-        echo "ro.boot.vbmeta.device_state=locked"
-        echo "ro.boot.verifiedbootstate=green"
-        echo "ro.boot.warranty_bit=0"
-        echo "ro.warranty_bit=0"
-    } >> "$f"
-done
-info "Hoàn tất ẩn prop bypass VNeID!"
-
 # ----> FIX LỖI ĐÓNG GÓI REPACK (NHẬN DIỆN A/B DEVICE CHO HYPEROS 3) <----
 info "Đang đồng bộ lại prop để Pack ROM không bị lỗi..."
 
@@ -357,5 +330,18 @@ fi
 if ! grep -q "ro.build.ab_update=true" "$work_dir/build/baserom/images/vendor/build.prop"; then
     echo "ro.build.ab_update=true" >> "$work_dir/build/baserom/images/vendor/build.prop"
 fi
+
+# ----> THÊM PROP TÙY CHỈNH <----
+info "Đang thêm prop persist.sys.zk.multi=1..."
+for f in \
+    "$work_dir/build/baserom/images/system/system/build.prop" \
+    "$work_dir/build/baserom/images/product/etc/build.prop"; do
+    if [ -f "$f" ]; then
+        sed -i '/^persist\.sys\.zk\.multi=/d' "$f"
+        # đảm bảo file kết thúc bằng xuống dòng trước khi thêm
+        [ -n "$(tail -c1 "$f")" ] && echo "" >> "$f"
+        echo "persist.sys.zk.multi=1" >> "$f"
+    fi
+done
 
 find "$work_dir/build/baserom/images/" -exec touch -t 200901010000.00 {} + 2> /dev/null || true

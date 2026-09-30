@@ -1,4 +1,4 @@
-baserom="$1"
+Baserom="$1"
 repo_name="$2"
 prefix_id="$3"
 builder_name="$4"
@@ -155,14 +155,12 @@ done
 # ==================== FIX TÊN CODENAME THIẾT BỊ ====================
 detected_codename=""
 
-# Ưu tiên 1: Lấy từ product/etc/build.prop hoặc vendor (chứa codename máy thật, tránh chữ missi của system)
 if [ -f "$work_dir/build/baserom/images/product/etc/build.prop" ]; then
     detected_codename=$(grep -m1 "^ro.product.product.device=" "$work_dir/build/baserom/images/product/etc/build.prop" | cut -d= -f2 | tr '[:upper:]' '[:lower:]')
 elif [ -f "$work_dir/build/baserom/images/vendor/build.prop" ]; then
     detected_codename=$(grep -m1 "^ro.product.vendor.device=" "$work_dir/build/baserom/images/vendor/build.prop" | cut -d= -f2 | tr '[:upper:]' '[:lower:]')
 fi
 
-# Ưu tiên 2: Nếu lấy ra missi hoặc rỗng thì bóc thẳng từ chuỗi baserom/tên file zip
 if [[ -z "$detected_codename" ]] || ! echo "$detected_codename" | grep -qE "^(peridot|onyx|garnet|corot|duchamp|manet|houji|shennong)$"; then
     detected_codename=$(echo "$baserom" | grep -o -i -E "(peridot|onyx|garnet|corot|duchamp|manet|houji|shennong)" | head -n 1 | tr '[:upper:]' '[:lower:]')
 fi
@@ -210,7 +208,6 @@ CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_code.txt 2>/dev/null)"
 [ -z "$CURRENT_CODENAME" ] && CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_model.txt 2>/dev/null)"
 [ -z "$CURRENT_CODENAME" ] && CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_f.txt 2>/dev/null)"
 
-# Nếu vẫn trống hoặc dính chữ 'missi', đọc từ build.prop của product / vendor
 if [ -z "$CURRENT_CODENAME" ] || [ "$CURRENT_CODENAME" = "missi" ]; then
     for prop in \
         "$work_dir/build/baserom/images/product/etc/build.prop" \
@@ -226,21 +223,17 @@ if [ -z "$CURRENT_CODENAME" ] || [ "$CURRENT_CODENAME" = "missi" ]; then
     done
 fi
 
-# Chuyển về chữ thường để so sánh regex chính xác
 CURRENT_CODENAME="$(echo "$CURRENT_CODENAME" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
 
 if [[ "$CURRENT_CODENAME" =~ (pudding|pandora|popsicle|nezha) ]]; then
     info "Thiết bị thuộc Xiaomi 17 Series ($CURRENT_CODENAME): Giữ nguyên toàn bộ HyperOS/MIUI và version prop gốc để tránh lỗi camera."
 else
-
-        # ----> ĐÓNG DẤU BẢN QUYỀN BugOS (FIX HIỂN THỊ CHỮ DƯỚI LOGO) <----
+    # ----> ĐÓNG DẤU BẢN QUYỀN BugOS (FIX HIỂN THỊ CHỮ DƯỚI LOGO) <----
     info "Đang thiết lập hiển thị BugOS 1.1..."
 
-    # 1. Dọn sạch tên mod bên thứ 3 cũ (nếu có)
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/MIUINT/MIUI/g' {} +
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" -exec sed -i 's/HyperNT/HyperOS/g' {} +
 
-    # 2. Lấy mã bản dựng gốc (VD: OS3.0.307.0.WPKCNXM)
     ORIGINAL_INC=""
     if [ -f "$work_dir/bin/ddevice/base_rom_code.txt" ]; then
         ORIGINAL_INC="$(head -n 1 "$work_dir/bin/ddevice/base_rom_code.txt" | tr -d '\r\n ')"
@@ -257,16 +250,58 @@ else
         done
     fi
     
-    # Đề phòng trường hợp không quét được mã gốc
     [ -z "$ORIGINAL_INC" ] && ORIGINAL_INC="OS3.0"
 
-    # 3. Kẹp BugOS 1.1 cùng với mã OS gốc vào display.id để app Cài đặt không bị ẩn khoảng trắng
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
         sed -i "s/^ro\.build\.display\.id=.*/ro.build.display.id=BugOS 1.1 | $ORIGINAL_INC/g" "$f"
-        # Dự phòng cho một số dòng máy mới dùng biến system
         sed -i "s/^ro\.system\.build\.display\.id=.*/ro.system.build.display.id=BugOS 1.1 | $ORIGINAL_INC/g" "$f"
     done
 fi
 
-find "$work_dir/build/baserom/images/" -exec touch -t 200901010000.00 {} + 2> /dev/null || true
+# ----> FIX HIỂN THỊ ĐÚNG TÊN MÁY (MARKET NAME) <----
+info "Đang đồng bộ tên hiển thị của thiết bị (Market Name)..."
 
+DEVICE_MARKET_NAME="$(cat $work_dir/bin/ddevice/device_name.txt 2>/dev/null)"
+[ -z "$DEVICE_MARKET_NAME" ] && DEVICE_MARKET_NAME="Xiaomi Device"
+
+find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
+    sed -i "s/^ro\.product\.model=.*/ro.product.model=$DEVICE_MARKET_NAME/g" "$f"
+    sed -i "s/^ro\.product\.system\.model=.*/ro.product.system.model=$DEVICE_MARKET_NAME/g" "$f"
+    sed -i "s/^ro\.product\.product\.model=.*/ro.product.product.model=$DEVICE_MARKET_NAME/g" "$f"
+    sed -i "s/^ro\.product\.vendor\.model=.*/ro.product.vendor.model=$DEVICE_MARKET_NAME/g" "$f"
+    
+    sed -i "/^ro\.product\.marketname=/d" "$f"
+    echo "ro.product.marketname=$DEVICE_MARKET_NAME" >> "$f"
+    
+    sed -i "/^ro\.market\.name=/d" "$f"
+    echo "ro.market.name=$DEVICE_MARKET_NAME" >> "$f"
+done
+
+# ----> BYPASS VNEID E012 & BANKING APPS <----
+info "Đang giả mạo prop để ẩn Custom ROM (Bypass VNeID/Banking)..."
+find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
+    sed -i 's/test-keys/release-keys/g' "$f"
+    sed -i \
+        -e '/^ro\.build\.type=/d' \
+        -e '/^ro\.debuggable=/d' \
+        -e '/^ro\.secure=/d' \
+        -e '/^ro\.boot\.flash\.locked=/d' \
+        -e '/^ro\.boot\.vbmeta\.device_state=/d' \
+        -e '/^ro\.boot\.verifiedbootstate=/d' \
+        -e '/^ro\.boot\.warranty_bit=/d' \
+        -e '/^ro\.warranty_bit=/d' "$f"
+
+    {
+        echo "ro.build.type=user"
+        echo "ro.debuggable=0"
+        echo "ro.secure=1"
+        echo "ro.boot.flash.locked=1"
+        echo "ro.boot.vbmeta.device_state=locked"
+        echo "ro.boot.verifiedbootstate=green"
+        echo "ro.boot.warranty_bit=0"
+        echo "ro.warranty_bit=0"
+    } >> "$f"
+done
+info "Hoàn tất ẩn prop bypass VNeID!"
+
+find "$work_dir/build/baserom/images/" -exec touch -t 200901010000.00 {} + 2> /dev/null || true

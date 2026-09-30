@@ -81,13 +81,29 @@ mkdir -p build/baserom/images/
 
 # Extract partitions
 if [[ ${baserom_type} == 'payload' ]]; then
-    unpack "Extracting files payload.bin..."
-    unzip "${baserom}" payload.bin -d build/baserom >/dev/null 2>&1 || error "Extracting payload.bin error"
-    unpack "File payload.bin extracted."
+    unpack "Unpacking payload.bin"
+    payload-extract extract -o build/baserom/images/ build/baserom/payload.bin >/dev/null 2>&1 || error "Unpacking payload.bin failed"    
+    
+    # ---> FIX LỖI MẤT PHÂN VÙNG TRÊN PAYLOAD.BIN (A/B DEVICE) <---
+    for i in build/baserom/images/*_a.img; do
+        if [ -f "$i" ]; then
+            mv "$i" "${i%_a.img}.img"
+        fi
+    done
+    for i in build/baserom/images/*_b.img; do
+        if [ -f "$i" ]; then
+            rm -f "$i"
+        fi
+    done
+
 elif [[ ${baserom_type} == 'br' ]]; then
-    unpack "Extracting files *.new.dat.br"
-    unzip "${baserom}" -d build/baserom >/dev/null 2>&1 || error "Extracting new.dat.br error"
-    unpack "File new.dat.br extracted."
+    super_list=$(cat build/baserom/dynamic_partitions_op_list | grep "add " | awk '{ print $2 }')
+    unpack "Unpacking new.dat.br"
+    for brotlipart in ${super_list}; do 
+        brotli -d build/baserom/$brotlipart.new.dat.br >/dev/null 2>&1
+        python3 $work_dir/bin/Linux/x86_64/sdat2img.py build/baserom/$brotlipart.transfer.list build/baserom/$brotlipart.new.dat build/baserom/images/$brotlipart.img >/dev/null 2>&1
+        rm -rf build/baserom/$brotlipart.new.dat* build/baserom/$brotlipart.transfer.list build/baserom/$brotlipart.patch.*
+    done
 elif [[ ${is_base_rom_eu} == true ]]; then
     unpack "Extracting files from BASETROM [super.img]"
     unzip -q "${baserom}" '*super.img*' -d build/baserom/ || error "Extracting [super.img] error"
@@ -119,20 +135,7 @@ elif [[ ${is_base_rom_eu} == true ]]; then
         /usr/bin/simg2img ${cust_dir}/cust.img.* build/baserom/images/cust.img 2>/dev/null || true
         rm -rf ${cust_dir}/cust.img.*
     fi
-fi
 
-if [[ ${baserom_type} == 'payload' ]]; then
-    unpack "Unpacking payload.bin"
-    payload-extract extract -o build/baserom/images/ build/baserom/payload.bin >/dev/null 2>&1 || error "Unpacking payload.bin failed"    
-elif [[ ${baserom_type} == 'br' ]]; then
-    super_list=$(cat build/baserom/dynamic_partitions_op_list | grep "add " | awk '{ print $2 }')
-    unpack "Unpacking new.dat.br"
-    for brotlipart in ${super_list}; do 
-        brotli -d build/baserom/$brotlipart.new.dat.br >/dev/null 2>&1
-        python3 $work_dir/bin/Linux/x86_64/sdat2img.py build/baserom/$brotlipart.transfer.list build/baserom/$brotlipart.new.dat build/baserom/images/$brotlipart.img >/dev/null 2>&1
-        rm -rf build/baserom/$brotlipart.new.dat* build/baserom/$brotlipart.transfer.list build/baserom/$brotlipart.patch.*
-    done
-elif [[ ${is_base_rom_eu} == true ]]; then
     unpack "Unpacking BASEROM [super.img]"
     python3 bin/lpunpack.py build/baserom/super.img build/baserom/images/ >/dev/null 2>&1
     
@@ -203,7 +206,6 @@ bash $work_dir/bin/modfile/UpdateFile/insupdate.sh
 bash $work_dir/bin/package/patchpackage.sh
 
 # ----> ĐIỀU KIỆN ÁP DỤNG ĐỊNH DANH VÀ BẢN QUYỀN <----
-# Đọc ưu tiên theo thứ tự các file định danh máy thật
 CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_code.txt 2>/dev/null)"
 [ -z "$CURRENT_CODENAME" ] && CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_model.txt 2>/dev/null)"
 [ -z "$CURRENT_CODENAME" ] && CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_f.txt 2>/dev/null)"
@@ -226,7 +228,7 @@ fi
 CURRENT_CODENAME="$(echo "$CURRENT_CODENAME" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
 
 if [[ "$CURRENT_CODENAME" =~ (pudding|pandora|popsicle|nezha) ]]; then
-    info "Thiết bị thuộc Xiaomi 17 Series ($CURRENT_CODENAME): Giữ nguyên toàn bộ HyperOS/MIUI và version prop gốc để tránh lỗi camera."
+    info "Thiết bị thuộc Xiaomi 17 Series ($CURRENT_CODENAME): Giữ nguyên toàn bộ HyperOS/MIUI và version prop gốc."
 else
     # ----> ĐÓNG DẤU BẢN QUYỀN BugOS (FIX HIỂN THỊ CHỮ DƯỚI LOGO) <----
     info "Đang thiết lập hiển thị BugOS 1.1..."
@@ -277,21 +279,46 @@ find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f;
     echo "ro.market.name=$DEVICE_MARKET_NAME" >> "$f"
 done
 
-# ----> FIX LỖI ĐÓNG GÓI REPACK (NHẬN DIỆN A/B DEVICE CHO HYPEROS 3) <----
-info "Đang sửa lỗi nhận diện A/B device cho trình đóng gói (Repack)..."
-mkdir -p "$work_dir/build/baserom/images/vendor"
+# ----> BYPASS VNEID E012 & BANKING APPS <----
+info "Đang giả mạo prop để ẩn Custom ROM (Bypass VNeID/Banking)..."
+find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
+    sed -i 's/test-keys/release-keys/g' "$f"
+    sed -i \
+        -e '/^ro\.build\.type=/d' \
+        -e '/^ro\.debuggable=/d' \
+        -e '/^ro\.secure=/d' \
+        -e '/^ro\.boot\.flash\.locked=/d' \
+        -e '/^ro\.boot\.vbmeta\.device_state=/d' \
+        -e '/^ro\.boot\.verifiedbootstate=/d' \
+        -e '/^ro\.boot\.warranty_bit=/d' \
+        -e '/^ro\.warranty_bit=/d' "$f"
 
-if [ ! -f "$work_dir/build/baserom/images/vendor/build.prop" ]; then
-    if [ -f "$work_dir/build/baserom/images/vendor/etc/build.prop" ]; then
-        cp "$work_dir/build/baserom/images/vendor/etc/build.prop" "$work_dir/build/baserom/images/vendor/build.prop"
-    else
-        touch "$work_dir/build/baserom/images/vendor/build.prop"
+    {
+        echo "ro.build.type=user"
+        echo "ro.debuggable=0"
+        echo "ro.secure=1"
+        echo "ro.boot.flash.locked=1"
+        echo "ro.boot.vbmeta.device_state=locked"
+        echo "ro.boot.verifiedbootstate=green"
+        echo "ro.boot.warranty_bit=0"
+        echo "ro.warranty_bit=0"
+    } >> "$f"
+done
+info "Hoàn tất ẩn prop bypass VNeID!"
+
+# ----> FIX LỖI ĐÓNG GÓI REPACK (NHẬN DIỆN A/B DEVICE CHO HYPEROS 3) <----
+info "Đang đồng bộ lại prop để Pack ROM không bị lỗi..."
+if [ -d "$work_dir/build/baserom/images/vendor" ]; then
+    if [ ! -f "$work_dir/build/baserom/images/vendor/build.prop" ]; then
+        if [ -f "$work_dir/build/baserom/images/vendor/etc/build.prop" ]; then
+            cp "$work_dir/build/baserom/images/vendor/etc/build.prop" "$work_dir/build/baserom/images/vendor/build.prop"
+        fi
+    fi
+    if [ -f "$work_dir/build/baserom/images/vendor/build.prop" ]; then
+        if ! grep -q "ro.build.ab_update=true" "$work_dir/build/baserom/images/vendor/build.prop"; then
+            echo "ro.build.ab_update=true" >> "$work_dir/build/baserom/images/vendor/build.prop"
+        fi
     fi
 fi
-
-if ! grep -q "ro.build.ab_update=true" "$work_dir/build/baserom/images/vendor/build.prop"; then
-    echo "ro.build.ab_update=true" >> "$work_dir/build/baserom/images/vendor/build.prop"
-fi
-info "Đã fix xong cấu hình A/B chuẩn bị cho quá trình Repack!"
 
 find "$work_dir/build/baserom/images/" -exec touch -t 200901010000.00 {} + 2> /dev/null || true

@@ -19,27 +19,11 @@ jobs:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
-          swap-size-mb: 1024
-          root-reserve-mb: 512
+          swap-size-mb: 4096
+          root-reserve-mb: 4096
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
-
-      - name: Clean All Unused file,application
-        run: |
-          docker rmi `docker images -q` || true
-          sudo apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell mysql* php* || true
-          sudo apt-get -y autoremove --purge || true
-          sudo apt-get -y autoclean || true
-          sudo apt-get clean || true
-
-      - name: Fix broken package state (dpkg)
-        run: |
-          sudo dpkg --configure -a || true
-          sudo apt-get -y purge php8.3-fpm php8.3-common php8.3-cli php8.3-cgi php8.3-phpdbg 2>/dev/null || true
-          sudo rm -rf /etc/php /usr/share/dotnet /etc/mysql
-          sudo apt-get update
-          sudo apt-get install -f -y || true
 
       - name: Checkout repository
         uses: actions/checkout@main
@@ -51,7 +35,7 @@ jobs:
 
       - name: Set up Time
         run: |
-          echo "Setting Vienam timezone"
+          echo "Setting Vietnam timezone"
           sudo timedatectl set-timezone Asia/Ho_Chi_Minh
 
       - name: Install OpenJDK
@@ -86,60 +70,38 @@ jobs:
 
       - name: Upload ROM to Gofile.io
         if: success()
+        continue-on-error: true
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
         run: |
-          export ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
-          
-          cat << 'EOF' | sed 's/^|//' > upload_gofile.py
-          |import os
-          |import requests
-          |
-          |rom_zip_path = os.environ.get("ROM_ZIP_PATH", "")
-          |token = os.environ.get("GOFILE_TOKEN", "")
-          |
-          |if not rom_zip_path or not os.path.exists(rom_zip_path):
-          |    print("Lỗi: Không tìm thấy file ROM zip để upload.")
-          |    exit(0)
-          |
-          |if not token:
-          |    print("Cảnh báo: Không có GOFILE_TOKEN. Quá trình upload có thể bị từ chối...")
-          |
-          |file_name = os.path.basename(rom_zip_path)
-          |print(f"Đang lấy server Gofile tốt nhất...")
-          |
-          |try:
-          |    # 1. Gọi API lấy server khả dụng
-          |    server_res = requests.get("https://api.gofile.io/servers").json()
-          |    if server_res.get("status") != "ok":
-          |        print(f"Lỗi lấy server: {server_res}")
-          |        exit(1)
-          |        
-          |    server_name = server_res["data"]["servers"][0]["name"]
-          |    print(f"Đã chọn server: {server_name}. Bắt đầu upload {file_name}...")
-          |
-          |    # 2. Upload file kèm token
-          |    url = f"https://{server_name}.gofile.io/contents/uploadfile"
-          |    with open(rom_zip_path, "rb") as f:
-          |        files = {"file": f}
-          |        data = {"token": token} if token else {}
-          |        upload_res = requests.post(url, files=files, data=data).json()
-          |
-          |    if upload_res.get("status") == "ok":
-          |        download_link = upload_res["data"]["downloadPage"]
-          |        print(f"Upload thành công! Link tải: {download_link}")
-          |
-          |        # Lưu link vào biến môi trường cho Telegram Bot
-          |        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-          |            env_file.write(f"DOWNLOAD_LINK={download_link}\n")
-          |    else:
-          |        print(f"Lỗi Gofile API trả về: {upload_res}")
-          |
-          |except Exception as e:
-          |    print(f"Quá trình upload thất bại do ngoại lệ: {e}")
-          EOF
-          
-          python3 upload_gofile.py
+          ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
+          if [ ! -f "$ROM_ZIP_PATH" ]; then
+            echo "Không thấy file ROM: $ROM_ZIP_PATH"
+            exit 0
+          fi
+
+          df -h /
+          free -h
+
+          AUTH=()
+          [ -n "$GOFILE_TOKEN" ] && AUTH=(-H "Authorization: Bearer $GOFILE_TOKEN")
+
+          LINK=""
+          for i in 1 2 3; do
+            RES=$(curl -sS --max-time 3600 "${AUTH[@]}" \
+                  -F "file=@${ROM_ZIP_PATH}" https://upload.gofile.io/uploadfile) || RES=""
+            echo "Lần $i: status=$(echo "$RES" | jq -r '.status' 2>/dev/null)"
+            LINK=$(echo "$RES" | jq -r '.data.downloadPage // empty' 2>/dev/null)
+            [ -n "$LINK" ] && break
+            sleep 10
+          done
+
+          if [ -n "$LINK" ]; then
+            echo "Upload thành công! Link tải: $LINK"
+            echo "DOWNLOAD_LINK=$LINK" >> "$GITHUB_ENV"
+          else
+            echo "Upload Gofile thất bại"
+          fi
 
       - name: Success Notification
         if: success()

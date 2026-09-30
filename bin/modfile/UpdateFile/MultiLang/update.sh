@@ -19,7 +19,8 @@ if [[ $deviceTYPE == "China" ]];then
                 -e '/^ro\.product\.locale=/d' \
                 -e '/^persist\.sys\.locale=/d' \
                 -e '/^ro\.miui\.region=/d' \
-                -e '/^ro\.miui\.build\.region=/d' "$prop"
+                -e '/^ro\.miui\.build\.region=/d' \
+                -e '/^persist\.sys\.zk\.multi=/d' "$prop"
 
             # Đảm bảo file kết thúc bằng xuống dòng trước khi thêm
             [ -n "$(tail -c1 "$prop")" ] && echo "" >> "$prop"
@@ -30,6 +31,7 @@ if [[ $deviceTYPE == "China" ]];then
                 echo "persist.sys.locale=vi-VN"
                 echo "ro.miui.region=VN"
                 echo "ro.miui.build.region=global"
+                echo "persist.sys.zk.multi=1"
             } >> "$prop"
         fi
     done

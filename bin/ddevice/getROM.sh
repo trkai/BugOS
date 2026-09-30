@@ -16,12 +16,13 @@ if [ ! -f "${baserom}" ] && [ "$(echo $baserom |grep http)" != "" ]; then
         info "BASEROM: ${baserom}"
     elif [ ! -f "${baserom}" ]; then
         error "Download error!"
+        exit 1
     fi
 elif [ -f "${baserom}" ]; then
     info "BASEROM: ${baserom}"
 else
     error "BASEROM: Invalid parameter"
-    exit
+    exit 1
 fi
 
 

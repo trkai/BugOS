@@ -195,22 +195,46 @@ done
 # ==================== FIX TÊN CODENAME THIẾT BỊ ====================
 detected_codename=""
 
-if [ -f "$work_dir/build/baserom/images/product/etc/build.prop" ]; then
-    detected_codename=$(grep -m1 "^ro.product.product.device=" "$work_dir/build/baserom/images/product/etc/build.prop" | cut -d= -f2 | tr '[:upper:]' '[:lower:]')
-elif [ -f "$work_dir/build/baserom/images/vendor/build.prop" ]; then
-    detected_codename=$(grep -m1 "^ro.product.vendor.device=" "$work_dir/build/baserom/images/vendor/build.prop" | cut -d= -f2 | tr '[:upper:]' '[:lower:]')
-fi
+# 1. Quét tìm codename trong các file build.prop thực tế
+for prop in \
+    "$work_dir/build/baserom/images/product/etc/build.prop" \
+    "$work_dir/build/baserom/images/vendor/build.prop" \
+    "$work_dir/build/baserom/images/system/system/build.prop" \
+    "$work_dir/build/baserom/images/odm/etc/build.prop"; do
+    if [ -f "$prop" ]; then
+        val=$(grep -E "^(ro\.product\.product\.device|ro\.product\.vendor\.device|ro\.product\.device|ro\.build\.product)=" "$prop" 2>/dev/null | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
+        if [ -n "$val" ] && [ "$val" != "missi" ]; then
+            detected_codename="$val"
+            break
+        fi
+    fi
+done
 
-if [[ -z "$detected_codename" ]] || ! echo "$detected_codename" | grep -qE "^(peridot|onyx|garnet|corot|duchamp|manet|houji|shennong|annibale)$"; then
-    detected_codename=$(echo "$baserom" | grep -o -i -E "(peridot|onyx|garnet|corot|duchamp|manet|houji|shennong|annibale)" | head -n 1 | tr '[:upper:]' '[:lower:]')
+# 2. Nếu chưa tìm được từ prop, thử đối soát tên file ROM với cơ sở dữ liệu thiết bị
+if [ -z "$detected_codename" ] || [ "$detected_codename" = "missi" ]; then
+    clean_rom_name=$(basename "$baserom" | tr '[:upper:]' '[:lower:]')
+    if [ -f "$work_dir/bin/ddevice/data/devices_data.txt" ]; then
+        while read -r code; do
+            code_clean=$(echo "$code" | tr '[:upper:]' '[:lower:]' | tr -d '\r\n ')
+            if [ -n "$code_clean" ] && [[ "$clean_rom_name" =~ (^|[^a-z0-9])${code_clean}([^a-z0-9]|$) ]]; then
+                detected_codename="$code_clean"
+                break
+            fi
+        done < "$work_dir/bin/ddevice/data/devices_data.txt"
+    fi
 fi
 
 if [ -n "$detected_codename" ]; then
     device_f="$detected_codename"
+    echo "$device_f" > "$work_dir/bin/ddevice/device_f.txt"
+    curr_dc=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null)
+    if [ -z "$curr_dc" ] || [ "$curr_dc" = "YourDevice" ] || [ "$curr_dc" = "missi" ]; then
+        echo "$device_f" > "$work_dir/bin/ddevice/device_code.txt"
+    fi
 fi
 
-echo "$device_f" > $work_dir/bin/ddevice/device_f.txt
-getvar=$(cat $work_dir/bin/ddevice/device_f.txt)
+getvar=$(cat "$work_dir/bin/ddevice/device_f.txt" 2>/dev/null)
+[ -z "$getvar" ] && getvar="$device_f"
 # ===================================================================
 
 rm -rf config
@@ -221,12 +245,8 @@ MY_BRAND_NAME="BugOS"
 echo "$MY_BRAND_NAME" > $work_dir/bin/ddevice/os_type.txt
 echo "$MY_BRAND_NAME" > $work_dir/bin/ddevice/brand.txt
 
-if [ ! -s "$work_dir/bin/ddevice/device_name.txt" ]; then
-    echo "Xiaomi Device" > $work_dir/bin/ddevice/device_name.txt
-fi
-
 mods "Gathering Devices Infomations"
-bash $work_dir/bin/ddevice/getname.sh $getvar
+bash $work_dir/bin/ddevice/getname.sh "$getvar"
 bash $work_dir/bin/ddevice/fetchINFO.sh
 
 python3 $work_dir/notify.py build "$repo_name" "$baserom" "$prefix_id" "$builder_name" "$builder_id"
@@ -237,6 +257,7 @@ info "Done"
 bash $work_dir/bin/modfile/OS1/insmod.sh
 bash $work_dir/bin/modfile/OS2/insmod.sh
 bash $work_dir/bin/modfile/OS3/insmod.sh
+bash $work_dir/bin/modfile/OS4/insmod.sh
 bash $work_dir/bin/modfile/Universal/insfile.sh
 bash $work_dir/bin/modfile/UpdateFile/insupdate.sh
 bash $work_dir/bin/package/patchpackage.sh
@@ -288,7 +309,10 @@ else
         done
     fi
 
-    [ -z "$ORIGINAL_INC" ] && ORIGINAL_INC="OS3.0"
+    if [ -z "$ORIGINAL_INC" ]; then
+        rom_os_val=$(cat "$work_dir/bin/ddevice/rom_os.txt" 2>/dev/null | tr -d '\r\n')
+        [ -n "$rom_os_val" ] && ORIGINAL_INC="${rom_os_val}.0" || ORIGINAL_INC="OS4.0"
+    fi
 
     find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
         sed -i "s/^ro\.build\.display\.id=.*/ro.build.display.id=BugOS 1.1 | $ORIGINAL_INC/g" "$f"
@@ -300,13 +324,36 @@ fi
 info "Đang đồng bộ tên hiển thị của thiết bị (Market Name)..."
 
 DEVICE_MARKET_NAME="$(cat $work_dir/bin/ddevice/device_name.txt 2>/dev/null)"
+[ -z "$DEVICE_MARKET_NAME" ] && DEVICE_MARKET_NAME="$(cat $work_dir/bin/ddevice/name_devices.txt 2>/dev/null)"
+
+# Nếu vẫn chưa có hoặc là giá trị mặc định, trích xuất trực tiếp từ các prop gốc của ROM
+if [ -z "$DEVICE_MARKET_NAME" ] || [ "$DEVICE_MARKET_NAME" = "Xiaomi Device" ] || [ "$DEVICE_MARKET_NAME" = "Không tìm thấy key" ]; then
+    for prop in \
+        "$work_dir/build/baserom/images/product/etc/build.prop" \
+        "$work_dir/build/baserom/images/system/system/build.prop" \
+        "$work_dir/build/baserom/images/vendor/build.prop" \
+        "$work_dir/build/baserom/images/odm/etc/build.prop"; do
+        if [ -f "$prop" ]; then
+            val=$(grep -E "^(ro\.product\.marketname|ro\.product\.product\.marketname|ro\.product\.model)=" "$prop" 2>/dev/null | head -n 1 | cut -d'=' -f2 | tr -d '\r\n')
+            if [ -n "$val" ] && [ "$val" != "Xiaomi Device" ]; then
+                DEVICE_MARKET_NAME="$val"
+                break
+            fi
+        fi
+    done
+fi
+
 [ -z "$DEVICE_MARKET_NAME" ] && DEVICE_MARKET_NAME="Xiaomi Device"
 
+# Cập nhật đồng bộ vào cả 2 file
+echo "$DEVICE_MARKET_NAME" > "$work_dir/bin/ddevice/device_name.txt"
+echo "$DEVICE_MARKET_NAME" > "$work_dir/bin/ddevice/name_devices.txt"
+
 find "$work_dir/build/baserom/images/" -type f -name "*.prop" | while read -r f; do
-    sed -i "s/^ro\.product\.model=.*/ro.product.model=$DEVICE_MARKET_NAME/g" "$f"
-    sed -i "s/^ro\.product\.system\.model=.*/ro.product.system.model=$DEVICE_MARKET_NAME/g" "$f"
-    sed -i "s/^ro\.product\.product\.model=.*/ro.product.product.model=$DEVICE_MARKET_NAME/g" "$f"
-    sed -i "s/^ro\.product\.vendor\.model=.*/ro.product.vendor.model=$DEVICE_MARKET_NAME/g" "$f"
+    sed -i "s#^ro\.product\.model=.*#ro.product.model=$DEVICE_MARKET_NAME#g" "$f"
+    sed -i "s#^ro\.product\.system\.model=.*#ro.product.system.model=$DEVICE_MARKET_NAME#g" "$f"
+    sed -i "s#^ro\.product\.product\.model=.*#ro.product.product.model=$DEVICE_MARKET_NAME#g" "$f"
+    sed -i "s#^ro\.product\.vendor\.model=.*#ro.product.vendor.model=$DEVICE_MARKET_NAME#g" "$f"
 
     sed -i "/^ro\.product\.marketname=/d" "$f"
     echo "ro.product.marketname=$DEVICE_MARKET_NAME" >> "$f"

@@ -5,8 +5,13 @@ source $work_dir/functions.sh
 regionTYPE=$(cat $work_dir/bin/ddevice/device_type.txt)
 AndroidVer=$(< $work_dir/build/baserom/images/system/system/build.prop grep "ro.system.build.version.release" |awk 'NR==1' |cut -d '=' -f 2)
 sdkLevel=$(< $work_dir/build/baserom/images/system/system/build.prop grep "ro.system.build.version.sdk" |awk 'NR==1' |cut -d '=' -f 2)
-device_code=$(cat $work_dir/bin/ddevice/device_code.txt)
-name=$(cat $work_dir/bin/ddevice/name_devices.txt)
+device_code=$(cat $work_dir/bin/ddevice/device_code.txt 2>/dev/null | tr -d '\r\n')
+[ -z "$device_code" ] && device_code=$(cat $work_dir/bin/ddevice/device_f.txt 2>/dev/null | tr -d '\r\n')
+[ -z "$device_code" ] && device_code="YourDevice"
+
+name=$(cat $work_dir/bin/ddevice/device_name.txt 2>/dev/null | tr -d '\r\n')
+[ -z "$name" ] && name=$(cat $work_dir/bin/ddevice/name_devices.txt 2>/dev/null | tr -d '\r\n')
+[ -z "$name" ] && name="Xiaomi Device"
 base_rom_code=$(cat $work_dir/bin/ddevice/base_rom_code.txt)
 rom_os=$(cat $work_dir/bin/ddevice/rom_os.txt)
 starxVER=$(cat $work_dir/Version)
@@ -37,12 +42,12 @@ echo "$systemtype" > $work_dir/bin/script2flash/META-INF/Data/Types
 
 
 echo "------------------ BugOS BuildInfo ---------------------"
-echo "- Device Name:"$name""
-echo "- Codename:"$device_code""
-echo "- Xiaomi Version:"$rom_os""  
-echo "- BuildRegion:"$regionTYPE""
-echo "- Android:"$AndroidVer""                                      
-echo "- Xiaomi Version:"$base_rom_code""                                                                        
-echo "- BuildTool Version:"$starxVER""
-echo "- OS Type:"$systemtype""
+echo "- Device Name: $name"
+echo "- Codename: $device_code"
+echo "- Xiaomi Version: $rom_os"  
+echo "- BuildRegion: $regionTYPE"
+echo "- Android: $AndroidVer"                                      
+echo "- Base ROM Code: $base_rom_code"                                                                        
+echo "- BuildTool Version: $starxVER"
+echo "- OS Type: $systemtype"
 echo "--------------------------------------------------------"

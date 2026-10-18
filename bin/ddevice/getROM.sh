@@ -86,6 +86,10 @@ elif echo "$base_rom_code" | grep -q "OS2"; then
     ROM_OS="OS2"
 elif echo "$base_rom_code" | grep -q "OS3"; then
     ROM_OS="OS3"
+elif echo "$base_rom_code" | grep -q "OS4"; then
+    ROM_OS="OS4"
+elif echo "$base_rom_code" | grep -qE "OS[0-9]+"; then
+    ROM_OS=$(echo "$base_rom_code" | grep -oE "OS[0-9]+" | head -n 1)
 elif echo "$base_rom_code" | grep -q "V14"; then
     ROM_OS="MIUI"
 elif echo "$base_rom_code" | grep -q "V13"; then

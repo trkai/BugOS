@@ -88,12 +88,26 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
 
     system_prop = "build/baserom/images/system/system/build.prop"
 
-    # ----- 1. Codename -----
+    # ----- 1. Codename & Tên máy (Device Name) -----
     codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
-    if not codename:
+    if not codename or codename == "YOURDEVICE":
+        codename = read_file_if_exists("bin/ddevice/device_f.txt").upper()
+    if not codename or codename == "YOURDEVICE":
         codename = read_file_if_exists("bin/ddevice/device_model.txt").upper()
-    if not codename:
+    if not codename or codename == "YOURDEVICE":
         codename = get_prop_value(system_prop, "ro.product.device", "").upper()
+    if not codename or codename == "YOURDEVICE":
+        codename = get_prop_value("build/baserom/images/product/etc/build.prop", "ro.product.product.device", "").upper()
+
+    device_name = read_file_if_exists("bin/ddevice/device_name.txt")
+    if not device_name or device_name in ["Không tìm thấy key", "Xiaomi Device"]:
+        device_name = read_file_if_exists("bin/ddevice/name_devices.txt")
+    if not device_name or device_name in ["Không tìm thấy key", "Xiaomi Device"]:
+        device_name = get_prop_value("build/baserom/images/product/etc/build.prop", "ro.product.marketname", "")
+    if not device_name or device_name in ["Không tìm thấy key", "Xiaomi Device"]:
+        device_name = get_prop_value("build/baserom/images/system/system/build.prop", "ro.product.marketname", "")
+    if device_name in ["Không tìm thấy key", "Xiaomi Device"]:
+        device_name = ""
 
     if not codename:
         device_dir = "bin/device"
@@ -139,7 +153,10 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
     else:
         codename_show = codename or "UNKNOWN"
         os_ver_show = xiaomi_version or "Đang đọc bản dựng…"
-        device_block = f"<code>{html_esc(codename_show)}</code>  ·  {html_esc(os_ver_show)}"
+        if device_name and device_name.upper() != codename_show:
+            device_block = f"<code>{html_esc(codename_show)}</code> ({html_esc(device_name)})  ·  {html_esc(os_ver_show)}"
+        else:
+            device_block = f"<code>{html_esc(codename_show)}</code>  ·  {html_esc(os_ver_show)}"
 
     progress_block = "" if status_l == "fail" else f"<code>{bar_for(pct)}  {pct}%</code>\n"
 

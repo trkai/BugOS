@@ -63,7 +63,7 @@ elif [[ $androidVER == "15" ]];then
     cp -rf $work_dir/bin/modfile/UpdateFile/Global_MultiverConvert2MiDialer/A15/* $work_dir/build/baserom/images/product/priv-app/
     cp -rf $work_dir/bin/modfile/UpdateFile/Global_MultiverConvert2MiDialer/overlay/* $work_dir/build/baserom/images/product/overlay/
     cp -rf $work_dir/bin/modfile/UpdateFile/Global_MultiverConvert2MiDialer/permissions/* $work_dir/build/baserom/images/product/etc/permissions/
-elif [[ $androidVER == "16" ]];then
+elif [[ $androidVER -ge "16" ]];then
     mods "Copying MIUI Dialer..."
     cp -rf $work_dir/bin/modfile/UpdateFile/Global_MultiverConvert2MiDialer/A16/* $work_dir/build/baserom/images/product/priv-app/
     cp -rf $work_dir/bin/modfile/UpdateFile/Global_MultiverConvert2MiDialer/overlay/* $work_dir/build/baserom/images/product/overlay/

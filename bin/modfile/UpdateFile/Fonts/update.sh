@@ -41,11 +41,11 @@ if [[ $deviceTYPE == "China" ]];then
 		rm $work_dir/build/baserom/images/system/system/fonts/MiSansVF_Overlay.ttf
         cp -rf $work_dir/bin/modfile/UpdateFile/Fonts/HyperOS/*.ttf $work_dir/build/baserom/images/system/system/fonts/
 		cp -rf $work_dir/bin/modfile/UpdateFile/Fonts/HyperOS/A14/*.ttf $work_dir/build/baserom/images/product/fonts/
-	elif [[ $rom_os == "OS3" ]] && [[ $androidVer -le "16" ]];then
+	elif [[ $rom_os == "OS3" || $rom_os == "OS4" ]] || [[ $rom_os =~ ^OS[3-9] ]];then
         mods "Detect HyperOS!Adding..."
-		rm $work_dir/build/baserom/images/system/system/fonts/MiSansLatinVF.ttf
-		rm $work_dir/build/baserom/images/system/system/fonts/MiSansVF.ttf
-		rm $work_dir/build/baserom/images/system/system/fonts/MiSansVF_Overlay.ttf
+		rm -f $work_dir/build/baserom/images/system/system/fonts/MiSansLatinVF.ttf
+		rm -f $work_dir/build/baserom/images/system/system/fonts/MiSansVF.ttf
+		rm -f $work_dir/build/baserom/images/system/system/fonts/MiSansVF_Overlay.ttf
         cp -rf $work_dir/bin/modfile/UpdateFile/Fonts/HyperOS/*.ttf $work_dir/build/baserom/images/system/system/fonts/
 		cp -rf $work_dir/bin/modfile/UpdateFile/Fonts/HyperOS/A14/*.ttf $work_dir/build/baserom/images/product/fonts/
     fi

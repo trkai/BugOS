@@ -95,7 +95,7 @@ mkdir -p build/baserom/images/
 # Extract partitions
 if [[ ${baserom_type} == 'payload' ]]; then
     unpack "Unpacking payload.bin"
-    df -h /
+    df -h "$work_dir"
 
     # Lấy payload.bin ra khỏi file zip (nếu chưa có)
     if [[ ! -f build/baserom/payload.bin ]]; then
@@ -110,7 +110,7 @@ if [[ ${baserom_type} == 'payload' ]]; then
 
     echo "===== Sau khi payload-extract ====="
     ls -la build/baserom/images/
-    df -h /
+    df -h "$work_dir"
 
     # ---> FIX LỖI MẤT PHÂN VÙNG TRÊN PAYLOAD.BIN (A/B DEVICE) <---
     for i in build/baserom/images/*_a.img; do
@@ -212,7 +212,7 @@ done
 
 echo "===== Sau khi extract các partition ====="
 ls -la $work_dir/build/baserom/images/
-df -h /
+df -h "$work_dir"
 
 # Bắt buộc phải có các partition chính, nếu không thì dừng luôn (không "giả thành công")
 for must in vendor system product; do
@@ -256,11 +256,17 @@ fi
 
 if [ -n "$detected_codename" ]; then
     device_f="$detected_codename"
-    echo "$device_f" > "$work_dir/bin/ddevice/device_f.txt"
-    curr_dc=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null)
-    if [ -z "$curr_dc" ] || [ "$curr_dc" = "YourDevice" ] || [ "$curr_dc" = "missi" ]; then
-        echo "$device_f" > "$work_dir/bin/ddevice/device_code.txt"
-    fi
+fi
+
+if [ -z "$device_f" ] || [ "$device_f" = "YourDevice" ] || [ "$device_f" = "missi" ]; then
+    device_f=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
+fi
+
+[ -n "$device_f" ] && echo "$device_f" > "$work_dir/bin/ddevice/device_f.txt"
+
+curr_dc=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null)
+if [ -z "$curr_dc" ] || [ "$curr_dc" = "YourDevice" ] || [ "$curr_dc" = "missi" ]; then
+    echo "$device_f" > "$work_dir/bin/ddevice/device_code.txt"
 fi
 
 getvar=$(cat "$work_dir/bin/ddevice/device_f.txt" 2>/dev/null)

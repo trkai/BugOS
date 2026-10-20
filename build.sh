@@ -206,7 +206,7 @@ for part in ${super_list}; do
         extract_partition $work_dir/build/baserom/images/${part}.img $work_dir/build/baserom/images || echo "!!! extract ${part} THẤT BẠI"
         PACK_TYPE=$(cat $work_dir/bin/ddevice/fstype.txt 2>/dev/null || echo "erofs")
     else
-        echo "!!! không thấy ${part}.img"
+        echo "-> Phân vùng ${part}.img không có trong ROM này (bỏ qua bình thường)"
     fi
 done
 

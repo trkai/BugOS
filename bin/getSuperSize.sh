@@ -1,42 +1,42 @@
 #!/bin/bash
-device_code=$1
-case $device_code in
-	#13 13Pro 13Ultra K60Pro MIXFold 12TB 14Ultra
-	fuxi | nuwa | ishtar | socrates | babylon | marble | aurora | dew | garnet | vermeer) size=9663676416;;
-	#Xiaomi 15 Pro/Ultra Redmi Turbo 4 Pro
-	haotian | xuanyuan | onyx | miro | klimt | dada | yudi | rodin | zorn | sheng | luming) size=11811160064;;
-	#Xiaomi Mix Fold 4
-	myron) size=14495514624;;
-	#Xiaomi 17 Series
-	annibale | pudding | popsicle | pandora) size=13421772800;;
-	#Xiaomi 17 Ultra
-	nezha) size=15300820992;;
-	#Redmi Note 12 5G
-	sunstone) size=9122611200;;
-	#Xiaomi 14 , 14 Pro
-	houji | shennong) size=8321499136;;
-	#Redmi 12R
-	sky) size=6979321856;;
-	#Redmi Note 12/13 13C
-	tapas | topaz | sapphire | sapphiren | gale) size=7516192768;;
-	#Redmi 12C
-	earth) size=7514095616;;
-	#Redmi Note 14 4G
-	tanzanite) size=8042577920;;
-	#Redmi Note 14 Pro 4G
-	obsidian) size=8053063680;;
-	#Redmi Note 13 Pro 4G
-	emerald) size=7505707008;;
-	#Others
-	*) size=9126805504;;
-esac
-echo $size
+device_code=$(echo "$1" | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
 
-#pipa 9126805504 |Pad6
-#liuqin 9126805504 |Pad6Pro
-#sunstone 9126805504 or 9122611200 |Note 12 5G
-#rembrandt 9126805504 |K60E
-#redwood 9126805504 |Note12ProSpeed
-#mondrian 9126805504 |K60
-#yunluo 9126805504 |RedmiPad
-#ruby 9126805504 |Note 12 Pro
+case $device_code in
+	# Xiaomi 17 Ultra
+	nezha) size=15300820992;;
+
+	# Xiaomi Mix Fold 4
+	myron) size=14495514624;;
+
+	# Xiaomi 17 Series
+	annibale | pudding | popsicle | pandora) size=13421772800;;
+
+	# Xiaomi 15 Series / Redmi K70 Pro / K70 Ultra / Redmi Turbo 4 Pro
+	haotian | xuanyuan | onyx | miro | klimt | dada | yudi | rodin | zorn | sheng | luming | manet | rothko) size=11811160064;;
+
+	# POCO F6 / Redmi Note 14 Pro Series
+	peridot | sea | ocean) size=10737418240;;
+
+	# Xiaomi 13 / 14 / K60 Series / Note 12-13 Pro Series / Civi / Pad 6
+	fuxi | nuwa | ishtar | socrates | babylon | marble | aurora | dew | garnet | vermeer | corot | duchamp | zircon | diting | plato | pipa | liuqin | mondrian | rembrandt | redwood | ruby | cupid | zeus | ingres | mayfly | unicorn | thor | rubens | matisse | shenzhou | houji | shennong) size=10021466112;;
+
+	# Xiaomi 10 / 11 / POCO F3 / F4 / Note 10 Pro
+	sweet | alioth | apollo | munch | zijin | taoyao | thyme | umi | cmi | cas) size=9663676416;;
+
+	# Redmi Note 12 5G
+	sunstone) size=9122611200;;
+
+	# Redmi Note 14 4G / Note 14 Pro 4G
+	obsidian | tanzanite) size=8053063680;;
+
+	# Redmi Note 12/13 4G / 13C / 12C
+	tapas | topaz | sapphire | sapphiren | gale | emerald | earth) size=7516192768;;
+
+	# Redmi 12R
+	sky) size=6979321856;;
+
+	# Default cho tất cả các máy HyperOS hiện đại khác
+	*) size=10021466112;;
+esac
+
+echo $size

@@ -62,11 +62,7 @@ elif [ "$(cat $work_dir/bin/ddevice/romtype.txt 2>/dev/null)" = "payload" ]; the
 fi
 repack "A/B device: $is_ab_device"
 
-#Generate Super.img
-superSize=$(bash $work_dir/bin/getSuperSize.sh $getvar)
-repack $superSize
-repack "Super image size: ${superSize}"
-repack "Packing super.img"
+repack "Packing partitions to .img"
 for pname in ${super_list}; do
     if [ -d "$IMG_DIR/$pname" ]; then
         thisSize=$(du -sb $IMG_DIR/${pname} | awk '{print $1}')
@@ -123,36 +119,94 @@ if ! ls $IMG_DIR/*.img >/dev/null 2>&1; then
     exit 1
 fi
 
+# ==================== TÍNH TOÁN DUNG LƯỢNG VÀ ĐÓNG GÓI SUPER.IMG ====================
+repack "Tính toán dung lượng các phân vùng con..."
+total_subsize=0
+for pname in ${super_list}; do
+    img_path="$IMG_DIR/${pname}.img"
+    if [ -f "$img_path" ]; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            subsize=$(stat -f%z "$img_path")
+        else
+            subsize=$(du -sb "$img_path" | awk '{print $1}')
+        fi
+        repack "Super sub-partition [$pname] size: [$subsize] bytes ($((subsize / 1024 / 1024)) MB)"
+        total_subsize=$((total_subsize + subsize))
+    fi
+done
+repack "Tổng dung lượng các phân vùng cần đóng gói: $total_subsize bytes ($((total_subsize / 1024 / 1024)) MB)"
+
+# Tính toán dung lượng tối thiểu bắt buộc
+# Cần buffer 32MB cho alignment và các block phụ
+min_group_size=$((total_subsize + 33554432))
+# Làm tròn lên bội số của 4MB (4194304 bytes) theo sector block của lpmake
+min_group_size=$(( ((min_group_size + 4194303) / 4194304) * 4194304 ))
+
+# Kích thước super.img tối thiểu = GROUP_SIZE + 128MB (LpMetadata, headers, slot tables)
+min_super_size=$((min_group_size + 134217728))
+min_super_size=$(( ((min_super_size + 4194303) / 4194304) * 4194304 ))
+
+# Xác định superSize cấu hình
+superSize=""
+if [ -s "$work_dir/bin/ddevice/superSize.txt" ]; then
+    superSize=$(cat "$work_dir/bin/ddevice/superSize.txt" | tr -d '\r\n ')
+fi
+
+if [ -z "$superSize" ] || [ "$superSize" -le 0 ] 2>/dev/null; then
+    superSize=$(bash $work_dir/bin/getSuperSize.sh $getvar)
+fi
+
+if [ -z "$superSize" ] || [ "$superSize" -le 0 ] 2>/dev/null; then
+    superSize=10021466112
+fi
+
+# CHỐT CHẶN AN TOÀN: Đảm bảo superSize và GROUP_SIZE luôn đủ chỗ cho các phân vùng
+if [ "$superSize" -lt "$min_super_size" ]; then
+    repack "CẢNH BÁO: superSize cấu hình ($superSize) không đủ chứa tổng các phân vùng ($total_subsize)!"
+    repack "Tự động điều chỉnh superSize từ $superSize lên $min_super_size (GROUP_SIZE: $min_group_size) để tránh lỗi lpmake..."
+    superSize=$min_super_size
+    GROUP_SIZE=$min_group_size
+else
+    GROUP_SIZE=$((superSize - 134217728))
+    if [ "$GROUP_SIZE" -lt "$min_group_size" ]; then
+        GROUP_SIZE=$min_group_size
+        superSize=$((GROUP_SIZE + 134217728))
+    fi
+fi
+
+repack "Super image size: ${superSize} bytes ($((superSize / 1024 / 1024)) MB)"
+repack "Group size: ${GROUP_SIZE} bytes ($((GROUP_SIZE / 1024 / 1024)) MB)"
+
 # Pack super.img
 if [[ "$is_ab_device" == false ]]; then
     repack "Packing super.img for A-only device"
-    GROUP_SIZE=$((superSize - 134217728))
-    lpargs="-F --output build/baserom/images/super.img --metadata-size 65536 --super-name super --metadata-slots 2 --block-size 4096 --device super:$superSize --group=qti_dynamic_partitions:$GROUP_SIZE"
+    lpargs="-F --output $IMG_DIR/super.img --metadata-size 65536 --super-name super --metadata-slots 2 --block-size 4096 --device super:$superSize --group=qti_dynamic_partitions:$GROUP_SIZE"
 
     for pname in odm mi_ext system system_ext product vendor; do
-        if [ -f "build/baserom/images/${pname}.img" ]; then
+        img_path="$IMG_DIR/${pname}.img"
+        if [ -f "$img_path" ]; then
             if [[ "$OSTYPE" == "darwin"* ]]; then
-                subsize=$(stat -f%z "build/baserom/images/${pname}.img")
+                subsize=$(stat -f%z "$img_path")
             else
-                subsize=$(du -sb "build/baserom/images/${pname}.img" | awk '{print $1}')
+                subsize=$(du -sb "$img_path" | awk '{print $1}')
             fi
-            repack "Super sub-partition [$pname] size: [$subsize]"
-            lpargs="$lpargs --partition ${pname}:readonly:${subsize}:qti_dynamic_partitions --image ${pname}=build/baserom/images/${pname}.img"
+            lpargs="$lpargs --partition ${pname}:readonly:${subsize}:qti_dynamic_partitions --image ${pname}=$img_path"
         fi
     done
 
 else
     repack "Packing super.img for V-AB device"
-
-    GROUP_SIZE=$((superSize - 134217728))   # 128MB margin
-
     lpargs="-F --virtual-ab --output $IMG_DIR/super.img --metadata-size 65536 --super-name super --metadata-slots 3 --block-size 4096 --device super:$superSize --group=qti_dynamic_partitions_a:$GROUP_SIZE --group=qti_dynamic_partitions_b:$GROUP_SIZE"
 
     for pname in ${super_list}; do
-        if [ -f "build/baserom/images/${pname}.img" ]; then
-            subsize=$(du -sb "build/baserom/images/${pname}.img" | awk '{print $1}')
-            repack "Super sub-partition [$pname] size: [$subsize]"
-            lpargs="$lpargs --partition ${pname}_a:readonly:${subsize}:qti_dynamic_partitions_a --image ${pname}_a=build/baserom/images/${pname}.img --partition ${pname}_b:readonly:0:qti_dynamic_partitions_b"
+        img_path="$IMG_DIR/${pname}.img"
+        if [ -f "$img_path" ]; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                subsize=$(stat -f%z "$img_path")
+            else
+                subsize=$(du -sb "$img_path" | awk '{print $1}')
+            fi
+            lpargs="$lpargs --partition ${pname}_a:readonly:${subsize}:qti_dynamic_partitions_a --image ${pname}_a=$img_path --partition ${pname}_b:readonly:0:qti_dynamic_partitions_b"
         fi
     done
 fi

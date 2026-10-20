@@ -148,6 +148,12 @@ elif [[ ${is_base_rom_eu} == true ]]; then
         exit 1
     fi
 
+    orig_super_size=$(stat -c%s build/baserom/super.img 2>/dev/null)
+    if [ -n "$orig_super_size" ] && [ "$orig_super_size" -gt 0 ] 2>/dev/null; then
+        echo "$orig_super_size" > "$work_dir/bin/ddevice/superSize.txt"
+        unpack "Phát hiện kích thước super.img gốc: $orig_super_size bytes"
+    fi
+
     rm -rf ${super_dir}/*super.img.*
     unpack "[super.img] extracted."
 

@@ -56,6 +56,12 @@ if [[ ! -f "$baserom" ]]; then
     error "Không tìm thấy file ROM sau khi tải: $baserom"
     exit 1
 fi
+
+rom_download_size=$(stat -c%s "$baserom" 2>/dev/null || du -sb "$baserom" 2>/dev/null | awk '{print $1}')
+echo "$rom_download_size" > "$work_dir/bin/ddevice/rom_download_size.txt"
+unpack "File ROM tải về: $(basename "$baserom") ($((rom_download_size / 1024 / 1024)) MB)"
+free_disk_mb=$(df -m "$work_dir" | awk 'NR==2 {print $4}')
+unpack "Dung lượng ổ đĩa khả dụng của hệ thống: ${free_disk_mb} MB"
 # ================================================================
 
 python3 $work_dir/notify.py unpack "$repo_name" "$baserom" "$prefix_id" "$builder_name" "$builder_id"
@@ -175,6 +181,24 @@ elif [[ ${is_base_rom_eu} == true ]]; then
 
     super_list="system system_ext product vendor odm mi_ext"
 fi
+
+# ==================== ĐO DUNG LƯỢNG PHÂN VÙNG GỐC TỪ ROM ====================
+unpack "Tự động phân tích dung lượng các phân vùng gốc..."
+stock_total_size=0
+for part in ${super_list}; do
+    part_img="$work_dir/build/baserom/images/${part}.img"
+    if [ -f "$part_img" ]; then
+        p_size=$(stat -c%s "$part_img" 2>/dev/null || echo 0)
+        echo "$p_size" > "$work_dir/bin/ddevice/orig_size_${part}.txt"
+        stock_total_size=$((stock_total_size + p_size))
+        unpack "  [GỐC] Phân vùng ${part}: $p_size bytes ($((p_size / 1024 / 1024)) MB)"
+    fi
+done
+if [ "$stock_total_size" -gt 0 ]; then
+    echo "$stock_total_size" > "$work_dir/bin/ddevice/stock_partitions_total.txt"
+    unpack "  ===> Tổng dung lượng phân vùng gốc: $stock_total_size bytes ($((stock_total_size / 1024 / 1024)) MB)"
+fi
+# ============================================================================
 
 for part in ${super_list}; do
     if [ -f "$work_dir/build/baserom/images/${part}.img" ]; then

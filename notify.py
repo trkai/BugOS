@@ -166,8 +166,17 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
         links.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
     links_block = "  ·  ".join(links)
 
-    # ----- ID chỉ hiện số -----
+    # ----- ID & Thông tin dung lượng -----
     build_id_show = str(build_id).split("_")[-1]
+    info_items = [f"🆔 <code>{html_esc(build_id_show)}</code>"]
+
+    size_info = read_file_if_exists("bin/ddevice/rom_size.txt")
+    if not size_info:
+        size_info = read_file_if_exists("bin/ddevice/super_size_human.txt")
+    if size_info:
+        info_items.append(f"📦 Dung lượng: <code>{html_esc(size_info)}</code>")
+
+    info_items.append(f"🕐 {get_time_vn()}")
 
     lines = [
         "<b>BugOS</b> · ROM Builder",
@@ -178,9 +187,7 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
         f"{icon} <b>{title}</b>",
         f"{progress_block}<i>{html_esc(hint)}</i>",
         "",
-        f"🆔 <code>{html_esc(build_id_show)}</code>",
-        f"🕐 {get_time_vn()}",
-    ]
+    ] + info_items
 
     if links_block:
         lines.append(links_block)

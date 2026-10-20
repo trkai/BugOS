@@ -120,8 +120,11 @@ if ! ls $IMG_DIR/*.img >/dev/null 2>&1; then
 fi
 
 # ==================== TÍNH TOÁN DUNG LƯỢNG VÀ ĐÓNG GÓI SUPER.IMG ====================
-repack "Tính toán dung lượng các phân vùng con..."
+repack "Đang tự động tính toán dung lượng các phân vùng con..."
 total_subsize=0
+stock_total=$(cat "$work_dir/bin/ddevice/stock_partitions_total.txt" 2>/dev/null || echo 0)
+
+repack "----------------- BẢNG DUNG LƯỢNG PHÂN VÙNG -----------------"
 for pname in ${super_list}; do
     img_path="$IMG_DIR/${pname}.img"
     if [ -f "$img_path" ]; then
@@ -130,11 +133,23 @@ for pname in ${super_list}; do
         else
             subsize=$(du -sb "$img_path" | awk '{print $1}')
         fi
-        repack "Super sub-partition [$pname] size: [$subsize] bytes ($((subsize / 1024 / 1024)) MB)"
+        orig_p=$(cat "$work_dir/bin/ddevice/orig_size_${pname}.txt" 2>/dev/null || echo 0)
+        orig_mb=$((orig_p / 1024 / 1024))
+        new_mb=$((subsize / 1024 / 1024))
+        diff_mb=$((new_mb - orig_mb))
+        if [ "$orig_p" -gt 0 ]; then
+            repack "  -> [$pname]: $new_mb MB (Gốc: $orig_mb MB | Chênh lệch: ${diff_mb} MB)"
+        else
+            repack "  -> [$pname]: $new_mb MB"
+        fi
         total_subsize=$((total_subsize + subsize))
     fi
 done
+repack "------------------------------------------------------------"
 repack "Tổng dung lượng các phân vùng cần đóng gói: $total_subsize bytes ($((total_subsize / 1024 / 1024)) MB)"
+if [ "$stock_total" -gt 0 ]; then
+    repack "Tổng dung lượng gốc tương ứng từ ROM nguồn: $stock_total bytes ($((stock_total / 1024 / 1024)) MB)"
+fi
 
 # Tính toán dung lượng tối thiểu bắt buộc
 # Cần buffer 32MB cho alignment và các block phụ
@@ -146,24 +161,39 @@ min_group_size=$(( ((min_group_size + 4194303) / 4194304) * 4194304 ))
 min_super_size=$((min_group_size + 134217728))
 min_super_size=$(( ((min_super_size + 4194303) / 4194304) * 4194304 ))
 
-# Xác định superSize cấu hình
+# Xác định superSize theo thứ tự ưu tiên
 superSize=""
+# 1. Từ file super.img gốc nếu có
 if [ -s "$work_dir/bin/ddevice/superSize.txt" ]; then
     superSize=$(cat "$work_dir/bin/ddevice/superSize.txt" | tr -d '\r\n ')
+    repack "Đọc superSize từ ROM gốc: $superSize bytes"
 fi
 
+# 2. Hoặc từ tổng các phân vùng gốc + 128MB margin
+if [ -z "$superSize" ] || [ "$superSize" -le 0 ] 2>/dev/null; then
+    if [ "$stock_total" -gt 0 ]; then
+        stock_super_est=$((stock_total + 134217728))
+        stock_super_est=$(( ((stock_super_est + 4194303) / 4194304) * 4194304 ))
+        superSize=$stock_super_est
+        repack "Ước tính superSize từ phân vùng gốc: $superSize bytes"
+    fi
+fi
+
+# 3. Hoặc tra cứu theo database thiết bị
 if [ -z "$superSize" ] || [ "$superSize" -le 0 ] 2>/dev/null; then
     superSize=$(bash $work_dir/bin/getSuperSize.sh $getvar)
+    repack "Lấy superSize từ database thiết bị: $superSize bytes"
 fi
 
+# 4. Fallback an toàn
 if [ -z "$superSize" ] || [ "$superSize" -le 0 ] 2>/dev/null; then
     superSize=10021466112
 fi
 
 # CHỐT CHẶN AN TOÀN: Đảm bảo superSize và GROUP_SIZE luôn đủ chỗ cho các phân vùng
 if [ "$superSize" -lt "$min_super_size" ]; then
-    repack "CẢNH BÁO: superSize cấu hình ($superSize) không đủ chứa tổng các phân vùng ($total_subsize)!"
-    repack "Tự động điều chỉnh superSize từ $superSize lên $min_super_size (GROUP_SIZE: $min_group_size) để tránh lỗi lpmake..."
+    repack "CẢNH BÁO: superSize ($superSize) nhỏ hơn dung lượng yêu cầu ($min_super_size)!"
+    repack "Tự động mở rộng superSize lên $min_super_size (GROUP_SIZE: $min_group_size) để đảm bảo không lỗi..."
     superSize=$min_super_size
     GROUP_SIZE=$min_group_size
 else
@@ -174,8 +204,15 @@ else
     fi
 fi
 
-repack "Super image size: ${superSize} bytes ($((superSize / 1024 / 1024)) MB)"
-repack "Group size: ${GROUP_SIZE} bytes ($((GROUP_SIZE / 1024 / 1024)) MB)"
+free_in_group=$((GROUP_SIZE - total_subsize))
+repack "================= THÔNG SỐ ĐÓNG GÓI CUỐI CÙNG ================="
+repack "  -> Kích thước Super.img : ${superSize} bytes ($((superSize / 1024 / 1024)) MB)"
+repack "  -> Kích thước Group lpmake: ${GROUP_SIZE} bytes ($((GROUP_SIZE / 1024 / 1024)) MB)"
+repack "  -> Dung lượng trống dự phòng: ${free_in_group} bytes ($((free_in_group / 1024 / 1024)) MB)"
+repack "================================================================"
+
+super_human="$((superSize / 1024 / 1024)) MB"
+echo "$super_human" > "$work_dir/bin/ddevice/super_size_human.txt"
 
 # Pack super.img
 if [[ "$is_ab_device" == false ]]; then

@@ -74,7 +74,7 @@ jobs:
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
         run: |
-          python bin/upload_gofile.py
+          python -u bin/upload_gofile.py
 
       - name: Success Notification
         if: success()

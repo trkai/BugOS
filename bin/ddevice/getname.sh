@@ -3,7 +3,9 @@ work_dir=$(pwd)
 source "$work_dir/functions.sh" 2>/dev/null || true
 
 KEY="${1:-$(cat "$work_dir/bin/ddevice/device_f.txt" 2>/dev/null)}"
-[ -z "$KEY" ] && KEY=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null)
+if is_dummy_codename "$KEY"; then
+    KEY=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null)
+fi
 KEY=$(echo "$KEY" | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
 region=$(cat "$work_dir/bin/ddevice/device_type.txt" 2>/dev/null | tr -d '\r\n ')
 

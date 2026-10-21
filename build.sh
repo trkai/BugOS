@@ -225,23 +225,21 @@ done
 # ==================== FIX TÊN CODENAME THIẾT BỊ ====================
 detected_codename=""
 
-# 1. Quét tìm codename trong các file build.prop thực tế
-for prop in \
-    "$work_dir/build/baserom/images/product/etc/build.prop" \
-    "$work_dir/build/baserom/images/vendor/build.prop" \
-    "$work_dir/build/baserom/images/system/system/build.prop" \
-    "$work_dir/build/baserom/images/odm/etc/build.prop"; do
-    if [ -f "$prop" ]; then
-        val=$(grep -E "^(ro\.product\.product\.device|ro\.product\.vendor\.device|ro\.product\.device|ro\.build\.product)=" "$prop" 2>/dev/null | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
-        if [ -n "$val" ] && [ "$val" != "missi" ]; then
-            detected_codename="$val"
-            break
-        fi
-    fi
-done
+# 1. Ưu tiên kiểm tra device_f hoặc device_code đã được trích xuất từ tên gói ROM (chuẩn xác nhất)
+curr_df=$(cat "$work_dir/bin/ddevice/device_f.txt" 2>/dev/null | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
+if ! is_dummy_codename "$curr_df"; then
+    detected_codename="$curr_df"
+fi
 
-# 2. Nếu chưa tìm được từ prop, thử đối soát tên file ROM với cơ sở dữ liệu thiết bị
-if [ -z "$detected_codename" ] || [ "$detected_codename" = "missi" ]; then
+if [ -z "$detected_codename" ]; then
+    curr_dc=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
+    if ! is_dummy_codename "$curr_dc"; then
+        detected_codename="$curr_dc"
+    fi
+fi
+
+# 2. Nếu chưa có, đối soát tên file ROM với danh sách thiết bị
+if [ -z "$detected_codename" ] && [ -n "$baserom" ]; then
     clean_rom_name=$(basename "$baserom" | tr '[:upper:]' '[:lower:]')
     if [ -f "$work_dir/bin/ddevice/data/devices_data.txt" ]; then
         while read -r code; do
@@ -252,26 +250,52 @@ if [ -z "$detected_codename" ] || [ "$detected_codename" = "missi" ]; then
             fi
         done < "$work_dir/bin/ddevice/data/devices_data.txt"
     fi
+    if [ -z "$detected_codename" ]; then
+        cand=$(basename "$baserom" | cut -d'-' -f1 | cut -d'_' -f2 | tr '[:upper:]' '[:lower:]' | tr -d '\r\n ')
+        if ! is_dummy_codename "$cand"; then
+            detected_codename="$cand"
+        fi
+    fi
 fi
 
-if [ -n "$detected_codename" ] && [ "$detected_codename" != "missi" ]; then
+# 3. Fallback: Quét tìm codename trong các file build.prop thực tế (loại bỏ tuyệt đối các tag phân vùng miproduct, mivendor, missi...)
+if [ -z "$detected_codename" ]; then
+    for prop in \
+        "$work_dir/build/baserom/images/product/etc/build.prop" \
+        "$work_dir/build/baserom/images/odm/etc/build.prop" \
+        "$work_dir/build/baserom/images/system/system/build.prop" \
+        "$work_dir/build/baserom/images/vendor/build.prop"; do
+        if [ -f "$prop" ]; then
+            for prop_key in ro.product.product.name ro.product.odm.device ro.product.name ro.build.product ro.product.device ro.product.mod_device; do
+                val=$(grep -E "^${prop_key}=" "$prop" 2>/dev/null | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
+                if ! is_dummy_codename "$val"; then
+                    detected_codename="$val"
+                    break 2
+                fi
+            done
+        fi
+    done
+fi
+
+if [ -n "$detected_codename" ]; then
     device_f="$detected_codename"
 fi
 
-if [ -z "$device_f" ] || [ "$device_f" = "YourDevice" ] || [ "$device_f" = "missi" ] || [ "$device_f" = "devicecode" ]; then
+if is_dummy_codename "$device_f"; then
     device_f=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
 fi
 
 # Fallback trích xuất trực tiếp từ tên file zip (ví dụ: annibale-ota_full-...)
-if [ -z "$device_f" ] || [ "$device_f" = "yourdevice" ] || [ "$device_f" = "missi" ] || [ "$device_f" = "devicecode" ]; then
+if is_dummy_codename "$device_f" && [ -n "$baserom" ]; then
     device_f=$(basename "$baserom" | cut -d'-' -f1 | cut -d'_' -f2 | tr '[:upper:]' '[:lower:]' | tr -d '\r\n ')
 fi
 
-[ -n "$device_f" ] && echo "$device_f" > "$work_dir/bin/ddevice/device_f.txt"
-
-curr_dc=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null)
-if [ -z "$curr_dc" ] || [ "$curr_dc" = "YourDevice" ] || [ "$curr_dc" = "missi" ] || [ "$curr_dc" = "devicecode" ]; then
-    echo "$device_f" > "$work_dir/bin/ddevice/device_code.txt"
+if ! is_dummy_codename "$device_f"; then
+    echo "$device_f" > "$work_dir/bin/ddevice/device_f.txt"
+    curr_dc=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null)
+    if is_dummy_codename "$curr_dc"; then
+        echo "$(echo "$device_f" | tr '[:lower:]' '[:upper:]')" > "$work_dir/bin/ddevice/device_code.txt"
+    fi
 fi
 
 getvar=$(cat "$work_dir/bin/ddevice/device_f.txt" 2>/dev/null)
@@ -308,17 +332,20 @@ CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_code.txt 2>/dev/null)"
 [ -z "$CURRENT_CODENAME" ] && CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_model.txt 2>/dev/null)"
 [ -z "$CURRENT_CODENAME" ] && CURRENT_CODENAME="$(cat $work_dir/bin/ddevice/device_f.txt 2>/dev/null)"
 
-if [ -z "$CURRENT_CODENAME" ] || [ "$CURRENT_CODENAME" = "missi" ]; then
+if is_dummy_codename "$CURRENT_CODENAME"; then
     for prop in \
         "$work_dir/build/baserom/images/product/etc/build.prop" \
-        "$work_dir/build/baserom/images/vendor/build.prop" \
-        "$work_dir/build/baserom/images/system/system/build.prop"; do
+        "$work_dir/build/baserom/images/odm/etc/build.prop" \
+        "$work_dir/build/baserom/images/system/system/build.prop" \
+        "$work_dir/build/baserom/images/vendor/build.prop"; do
         if [ -f "$prop" ]; then
-            val=$(grep -E "^(ro\.product\.product\.device|ro\.product\.vendor\.device|ro\.product\.device)=" "$prop" | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ')
-            if [ -n "$val" ] && [ "$val" != "missi" ]; then
-                CURRENT_CODENAME="$val"
-                break
-            fi
+            for prop_key in ro.product.product.name ro.product.odm.device ro.product.name ro.build.product ro.product.device; do
+                val=$(grep -E "^${prop_key}=" "$prop" 2>/dev/null | head -n 1 | cut -d'=' -f2 | tr -d '\r\n ')
+                if ! is_dummy_codename "$val"; then
+                    CURRENT_CODENAME="$val"
+                    break 2
+                fi
+            done
         fi
     done
 fi
@@ -376,7 +403,7 @@ if [ -z "$DEVICE_MARKET_NAME" ] || [ "$DEVICE_MARKET_NAME" = "Xiaomi Device" ] |
         "$work_dir/build/baserom/images/odm/etc/build.prop"; do
         if [ -f "$prop" ]; then
             val=$(grep -E "^(ro\.product\.marketname|ro\.product\.product\.marketname|ro\.product\.model)=" "$prop" 2>/dev/null | head -n 1 | cut -d'=' -f2 | tr -d '\r\n')
-            if [ -n "$val" ] && [ "$val" != "Xiaomi Device" ]; then
+            if [ -n "$val" ] && [ "$val" != "Xiaomi Device" ] && ! is_dummy_codename "$val"; then
                 DEVICE_MARKET_NAME="$val"
                 break
             fi

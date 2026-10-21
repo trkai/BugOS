@@ -89,15 +89,21 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
     system_prop = "build/baserom/images/system/system/build.prop"
 
     # ----- 1. Codename & Tên máy (Device Name) -----
+    DUMMY_CODENAMES = {"", "YOURDEVICE", "DEVICECODE", "UNKNOWN", "MISSI", "MIPRODUCT", "MIVENDOR", "GENERIC", "MAINLINE", "QSSI", "QTI"}
+
     codename = read_file_if_exists("bin/ddevice/device_code.txt").upper()
-    if not codename or codename == "YOURDEVICE":
+    if codename in DUMMY_CODENAMES:
         codename = read_file_if_exists("bin/ddevice/device_f.txt").upper()
-    if not codename or codename == "YOURDEVICE":
+    if codename in DUMMY_CODENAMES:
         codename = read_file_if_exists("bin/ddevice/device_model.txt").upper()
-    if not codename or codename == "YOURDEVICE":
+    if codename in DUMMY_CODENAMES:
         codename = get_prop_value(system_prop, "ro.product.device", "").upper()
-    if not codename or codename == "YOURDEVICE":
-        codename = get_prop_value("build/baserom/images/product/etc/build.prop", "ro.product.product.device", "").upper()
+    if codename in DUMMY_CODENAMES:
+        codename = get_prop_value("build/baserom/images/product/etc/build.prop", "ro.product.product.name", "").upper()
+    if codename in DUMMY_CODENAMES:
+        codename = get_prop_value("build/baserom/images/odm/etc/build.prop", "ro.product.odm.device", "").upper()
+    if codename in DUMMY_CODENAMES:
+        codename = ""
 
     device_name = read_file_if_exists("bin/ddevice/device_name.txt")
     if not device_name or device_name in ["Không tìm thấy key", "Xiaomi Device"]:

@@ -2,6 +2,14 @@
 yellow() { echo -e "\e[1;33m$*\e[0m"; }
 WORK_DIR=$(pwd)
 
+is_dummy_codename() {
+    local val=$(echo "$1" | tr '[:upper:]' '[:lower:]' | tr -d '\r\n ')
+    if [[ -z "$val" || "$val" =~ ^(miproduct|mivendor|missi|generic|mainline|qssi|qti|yourdevice|devicecode|unknown)$ ]]; then
+        return 0
+    fi
+    return 1
+}
+
 mods() {
     if [ "$#" -eq 1 ] ; then
         echo -e [MODS] - $1

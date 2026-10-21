@@ -14,6 +14,7 @@ def main():
         os.path.join(work_dir, "build/baserom/images/odm/etc/build.prop")
     ]
 
+    DUMMY_VALUES = {"xiaomi device", "miproduct", "mivendor", "generic", "mainline", "missi", "qssi", "qti", "yourdevice", "unknown"}
     for p in prop_paths:
         if os.path.exists(p):
             try:
@@ -22,7 +23,7 @@ def main():
                         m = re.match(r'^(?:ro\.product\.marketname|ro\.product\.product\.marketname|ro\.product\.model)=(.*)$', line.strip())
                         if m:
                             val = m.group(1).strip()
-                            if val and val != "Xiaomi Device" and not val.startswith("ro."):
+                            if val and val.lower() not in DUMMY_VALUES and not val.startswith("ro."):
                                 print(val)
                                 return
             except Exception:

@@ -201,6 +201,32 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
         if is_available(rom_link):
             res.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
 
+        # Đọc Changelog từ file hoặc sử dụng danh mục tính năng mặc định của BugOS
+        changelog_content = read_file_if_exists("bin/ddevice/changelog.txt")
+        if not changelog_content:
+            changelog_content = (
+                "• Việt hóa giao diện HyperOS tiếng Việt (Tory Overlay)\n"
+                "• Bộ font MiSans Latin VF tiếng Việt chuẩn không lỗi hiển thị\n"
+                "• Tích hợp Mi Dialer ghi âm cuộc gọi 2 chiều tự động không thông báo\n"
+                "• Mở khóa Theme Manager (hỗ trợ áp dụng theme bên thứ ba .mtz)\n"
+                "• Bật Làm mờ nâng cao (Gaussian Blur & Advanced Textures)\n"
+                "• Tích hợp CorePatch (cho phép cài đè, hạ cấp ứng dụng)\n"
+                "• Vô hiệu hóa xác minh khởi động an toàn (Disable AVB)\n"
+                "• Vá lỗi trễ thông báo trên nền tảng ROM China\n"
+                "• Mở khóa tần số quét màn hình (1Hz LTPO / High FPS)\n"
+                "• Tối ưu hóa hiệu năng và gỡ bỏ ứng dụng rác hệ thống"
+            )
+
+        res.append("")
+        res.append("📝 <b>Changelog:</b>")
+        for cl_line in changelog_content.strip().split("\n"):
+            cl_line = cl_line.strip()
+            if cl_line:
+                if not cl_line.startswith("•") and not cl_line.startswith("-") and not cl_line.startswith("*"):
+                    res.append(f"• {html_esc(cl_line)}")
+                else:
+                    res.append(f"{html_esc(cl_line)}")
+
         return "\n".join(res)
 
     lines = [

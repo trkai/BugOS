@@ -6,6 +6,10 @@ on:
       input_url:
         description: 'URL'
         required: true
+      changelog:
+        description: 'Changelog (tùy chọn, để trống sẽ dùng mặc định)'
+        required: false
+        default: ''
 
 jobs:
   Initialize:
@@ -24,9 +28,19 @@ jobs:
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
+          remove-docker-images: 'true'
 
       - name: Checkout repository
         uses: actions/checkout@main
+
+      - name: Setup Changelog
+        env:
+          CUSTOM_CHANGELOG: ${{ inputs.changelog }}
+        run: |
+          mkdir -p bin/ddevice
+          if [ -n "$CUSTOM_CHANGELOG" ]; then
+            printf "%s\n" "$CUSTOM_CHANGELOG" > bin/ddevice/changelog.txt
+          fi
 
       - name: Start Notify
         run: |

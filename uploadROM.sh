@@ -71,6 +71,41 @@ cp -rf $work_dir/bin/script2flash/cust.img "$target_out_dir/images/" 2>/dev/null
 
 mkdir -p "$target_out_dir/META-INF/Data"
 echo "$device_f" > "$target_out_dir/META-INF/Data/DeviceCode"
+
+# Tạo tệp changelog.txt trong gói ROM zip
+if [ -f "$work_dir/bin/ddevice/changelog.txt" ] && [ -s "$work_dir/bin/ddevice/changelog.txt" ]; then
+    cp -f "$work_dir/bin/ddevice/changelog.txt" "$target_out_dir/changelog.txt"
+else
+    cat << EOF > "$target_out_dir/changelog.txt"
+==================================================
+              BugOS 1.1 Changelog
+==================================================
+Thiết bị: ${device_code}
+Phiên bản: ${base_rom_code}
+Ngày đóng gói: ${build_date}
+
+1. Giao diện & Hiển thị:
+   - Việt hóa toàn diện HyperOS (58 gói Tory RRO Overlays).
+   - Bộ font MiSans Latin VF chuẩn hóa tiếng Việt đầy đủ ký tự.
+   - Kích hoạt Gaussian Blur thời gian thực & Advanced Textures.
+   - Gỡ bỏ hạn chế phần cứng máy yếu (Xiaomi_NoLowEnd).
+   - Xóa bỏ độ trễ khi nhấn giữ nút nguồn (Fix Delay Power Menu).
+
+2. Cuộc gọi & Ứng dụng:
+   - Tích hợp Mi Dialer tự động ghi âm 2 chiều không phát âm thanh cảnh báo.
+   - Mở khóa Theme Manager cho phép nạp theme bên thứ ba tự do (.mtz).
+   - Gỡ bỏ đếm ngược cảnh báo rủi ro của Package Installer.
+
+3. Hệ thống & Tối ưu:
+   - Tích hợp CorePatch (hạ cấp và cài đè ứng dụng khác chữ ký).
+   - Vô hiệu hóa xác minh Android Verified Boot (Disable AVB) chống bootloop.
+   - Khắc phục triệt để lỗi chậm / trễ thông báo ứng dụng (Notification Fix).
+   - Mở khóa tần số quét màn hình (hỗ trợ 1Hz LTPO và tần số cao).
+   - Dọn sạch ứng dụng rác và tiến trình theo dõi ngầm (Debloated).
+==================================================
+EOF
+fi
+
 repack "Done"
 
 # Định dạng tên file: BugOS_<codename>_<phiên bản os>_<ngày tháng năm>.zip

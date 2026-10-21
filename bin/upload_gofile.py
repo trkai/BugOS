@@ -3,6 +3,8 @@ import os
 import sys
 import json
 import time
+import shutil
+import subprocess
 import requests
 
 def get_best_server():
@@ -56,51 +58,79 @@ def upload_file(file_path, token=None):
         endpoints.append(f"https://{server}.gofile.io/uploadFile")
     endpoints.append("https://upload.gofile.io/uploadfile")
 
-    headers = {}
-    if valid_token:
-        headers["Authorization"] = f"Bearer {valid_token}"
-
+    curl_bin = shutil.which("curl")
     download_link = None
 
     for attempt, url in enumerate(endpoints, 1):
         print("------------------------------------------------------------")
         print(f"Lần thử {attempt}: Đang upload lên {url}...")
-        try:
-            with open(file_path, "rb") as f:
-                files = {"file": (file_name, f)}
-                data = {}
+        start_time = time.time()
+        res_json = None
+
+        # 1. Ưu tiên dùng curl trực tiếp để stream đĩa (không tốn RAM, an toàn tuyệt đối cho file lớn > 7GB)
+        if curl_bin:
+            try:
+                cmd = [curl_bin, "-sS", "--max-time", "7200"]
                 if valid_token:
-                    data["token"] = valid_token
+                    cmd.extend(["-H", f"Authorization: Bearer {valid_token}"])
+                    cmd.extend(["-F", f"token={valid_token}"])
+                cmd.extend(["-F", f"file=@{file_path}"])
+                cmd.append(url)
 
-                # Upload với timeout lớn cho file dung lượng cao (lên tới 2 tiếng)
-                start_time = time.time()
-                resp = requests.post(url, headers=headers, files=files, data=data, timeout=7200)
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=7200)
                 elapsed = time.time() - start_time
-                print(f"Upload hoàn tất trong {elapsed:.1f} giây. HTTP Status: {resp.status_code}")
+                print(f"Upload hoàn tất trong {elapsed:.1f} giây. Mã thoát curl: {proc.returncode}")
 
-                if resp.status_code == 200:
+                if proc.returncode == 0 and proc.stdout:
+                    raw_out = proc.stdout.strip()
                     try:
-                        res_json = resp.json()
-                        print(f"Phản hồi từ Gofile: {json.dumps(res_json, ensure_ascii=False)}")
-                        if res_json.get("status") == "ok":
-                            d_data = res_json.get("data", {})
-                            link = d_data.get("downloadPage")
-                            if not link:
-                                code = d_data.get("parentFolderCode") or d_data.get("code")
-                                if code:
-                                    link = f"https://gofile.io/d/{code}"
-
-                            if link:
-                                download_link = link
-                                print(f"🎉 Upload thành công! Link tải: {download_link}")
-                                break
-                    except Exception as parse_err:
-                        print(f"Lỗi parse JSON phản hồi: {parse_err}. Nội dung thô: {resp.text[:300]}")
+                        res_json = json.loads(raw_out)
+                    except Exception:
+                        idx = raw_out.rfind('{"status":')
+                        if idx != -1:
+                            try:
+                                res_json = json.loads(raw_out[idx:])
+                            except Exception:
+                                pass
                 else:
-                    print(f"Máy chủ trả về mã lỗi HTTP {resp.status_code}: {resp.text[:300]}")
+                    if proc.stderr:
+                        print(f"curl thông báo: {proc.stderr[:300]}")
+            except Exception as curl_err:
+                print(f"Lỗi khi gọi curl: {curl_err}")
 
-        except Exception as up_err:
-            print(f"Lỗi trong quá trình upload lên {url}: {up_err}")
+        # 2. Fallback bằng requests nếu curl không khả dụng hoặc chưa parse được JSON
+        if not res_json:
+            try:
+                print("Thử upload qua thư viện requests...")
+                headers = {}
+                if valid_token:
+                    headers["Authorization"] = f"Bearer {valid_token}"
+                with open(file_path, "rb") as f:
+                    files = {"file": (file_name, f)}
+                    data = {"token": valid_token} if valid_token else {}
+                    resp = requests.post(url, headers=headers, files=files, data=data, timeout=7200)
+                    if resp.status_code == 200:
+                        res_json = resp.json()
+            except Exception as req_err:
+                print(f"Lỗi khi dùng requests: {req_err}")
+
+        # 3. Phân tích kết quả JSON
+        if res_json:
+            print(f"Phản hồi từ Gofile: {json.dumps(res_json, ensure_ascii=False)}")
+            if res_json.get("status") == "ok":
+                d_data = res_json.get("data", {})
+                link = d_data.get("downloadPage")
+                if not link:
+                    code = d_data.get("parentFolderCode") or d_data.get("code")
+                    if code:
+                        link = f"https://gofile.io/d/{code}"
+
+                if link:
+                    download_link = link
+                    print(f"🎉 Upload thành công! Link tải: {download_link}")
+                    break
+        else:
+            print(f"⚠️ Chưa lấy được link từ {url}, chuẩn bị thử tiếp...")
 
         time.sleep(5)
 

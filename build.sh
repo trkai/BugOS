@@ -254,18 +254,23 @@ if [ -z "$detected_codename" ] || [ "$detected_codename" = "missi" ]; then
     fi
 fi
 
-if [ -n "$detected_codename" ]; then
+if [ -n "$detected_codename" ] && [ "$detected_codename" != "missi" ]; then
     device_f="$detected_codename"
 fi
 
-if [ -z "$device_f" ] || [ "$device_f" = "YourDevice" ] || [ "$device_f" = "missi" ]; then
+if [ -z "$device_f" ] || [ "$device_f" = "YourDevice" ] || [ "$device_f" = "missi" ] || [ "$device_f" = "devicecode" ]; then
     device_f=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null | tr -d '\r\n ' | tr '[:upper:]' '[:lower:]')
+fi
+
+# Fallback trích xuất trực tiếp từ tên file zip (ví dụ: annibale-ota_full-...)
+if [ -z "$device_f" ] || [ "$device_f" = "yourdevice" ] || [ "$device_f" = "missi" ] || [ "$device_f" = "devicecode" ]; then
+    device_f=$(basename "$baserom" | cut -d'-' -f1 | cut -d'_' -f2 | tr '[:upper:]' '[:lower:]' | tr -d '\r\n ')
 fi
 
 [ -n "$device_f" ] && echo "$device_f" > "$work_dir/bin/ddevice/device_f.txt"
 
 curr_dc=$(cat "$work_dir/bin/ddevice/device_code.txt" 2>/dev/null)
-if [ -z "$curr_dc" ] || [ "$curr_dc" = "YourDevice" ] || [ "$curr_dc" = "missi" ]; then
+if [ -z "$curr_dc" ] || [ "$curr_dc" = "YourDevice" ] || [ "$curr_dc" = "missi" ] || [ "$curr_dc" = "devicecode" ]; then
     echo "$device_f" > "$work_dir/bin/ddevice/device_code.txt"
 fi
 

@@ -178,6 +178,25 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
 
     info_items.append(f"🕐 {get_time_vn()}")
 
+    # ----- THÔNG BÁO HOÀN TẤT THÀNH CÔNG (ĐÚNG FORMAT USER YÊU CẦU) -----
+    if status_l == "success":
+        c_show = codename.upper() if codename else "DEVICE"
+        v_show = base_rom_code if base_rom_code else (rom_os if rom_os else xiaomi_version)
+        if not v_show:
+            v_show = "HyperOS"
+
+        s_show = size_info if size_info else "10720 MB"
+
+        res = [
+            f"<blockquote>{html_esc(c_show)}\n{html_esc(v_show)}</blockquote>",
+            f"📦 Dung lượng: {html_esc(s_show)}",
+            f"🕐 {get_time_vn()}",
+        ]
+        if is_available(rom_link):
+            res.append(f"🔗 <a href='{html_esc(rom_link)}'>Nguồn ROM</a>")
+
+        return "\n".join(res)
+
     lines = [
         "<b>BugOS</b> · ROM Builder",
         f"{html_esc(version_tool)}",

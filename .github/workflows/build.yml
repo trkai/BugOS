@@ -74,39 +74,12 @@ jobs:
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
         run: |
-          ROM_ZIP_PATH="out/$(cat bin/ddevice/output_zip.txt)"
-          if [ ! -f "$ROM_ZIP_PATH" ]; then
-            echo "Không thấy file ROM: $ROM_ZIP_PATH"
-            exit 0
-          fi
-
-          df -h /
-          free -h
-
-          AUTH=()
-          [ -n "$GOFILE_TOKEN" ] && AUTH=(-H "Authorization: Bearer $GOFILE_TOKEN")
-
-          LINK=""
-          for i in 1 2 3; do
-            RES=$(curl -sS --max-time 3600 "${AUTH[@]}" \
-                  -F "file=@${ROM_ZIP_PATH}" https://upload.gofile.io/uploadfile) || RES=""
-            echo "Lần $i: status=$(echo "$RES" | jq -r '.status' 2>/dev/null)"
-            LINK=$(echo "$RES" | jq -r '.data.downloadPage // empty' 2>/dev/null)
-            [ -n "$LINK" ] && break
-            sleep 10
-          done
-
-          if [ -n "$LINK" ]; then
-            echo "Upload thành công! Link tải: $LINK"
-            echo "DOWNLOAD_LINK=$LINK" >> "$GITHUB_ENV"
-          else
-            echo "Upload Gofile thất bại"
-          fi
+          python bin/upload_gofile.py
 
       - name: Success Notification
         if: success()
         run: |
-          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}"
+          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xiaomi" "${{ env.BUILDER_NAME }}" "${{ env.BUILDER_ID }}" "${{ env.DOWNLOAD_LINK }}"
 
       - name: Failure Notification
         if: failure()

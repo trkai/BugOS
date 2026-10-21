@@ -216,6 +216,8 @@ def send_notification(status, repo_name, rom_link, channel_id, bot_token, msg_id
     if is_success:
         if is_available(download_link):
             buttons.append([{"text": "⬇️ Tải ROM", "url": download_link}])
+        elif is_available(run_url):
+            buttons.append([{"text": "Mở trang bản dựng (Actions)", "url": run_url}])
     elif status.lower() == "fail":
         if is_available(run_url):
             buttons.append([{"text": "Mở log GitHub Actions", "url": run_url}])
@@ -264,6 +266,8 @@ if __name__ == "__main__":
     builder_id = sys.argv[6] if len(sys.argv) > 6 else ""
 
     download_link = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else os.environ.get("DOWNLOAD_LINK", "")
+    if not is_available(download_link):
+        download_link = read_file_if_exists("bin/ddevice/download_link.txt")
     rom_zip_path = sys.argv[8] if len(sys.argv) > 8 and sys.argv[8] else os.environ.get("ROM_ZIP_PATH", "")
 
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")

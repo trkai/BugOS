@@ -6,6 +6,9 @@ source $work_dir/functions.sh
 MAIN_FOLDER="$work_dir/build/baserom/images"
 JAR_NAME="miui-services.jar"
 JAR_SRC="$MAIN_FOLDER/system_ext/framework/$JAR_NAME"
+if [[ ! -f "$JAR_SRC" ]]; then
+    JAR_SRC=$(find "$MAIN_FOLDER" -type f -name "$JAR_NAME" 2>/dev/null | head -n1)
+fi
 JAR_TMP="$work_dir/jar_temp"
 JAR_OUT="$JAR_TMP/$JAR_NAME.out"
 bak="java -jar $work_dir/bin/apktool/baksmaliv2.jar d --api 36"
@@ -80,7 +83,7 @@ find_and_replace() {
 # (lấy đúng thanh ghi từ dòng gốc, không cố định v0)
 patch_cn_model() {
     local p1
-    p1=$(find "$JAR_OUT" -type f -path "*/com/miui/server/greeze/PolicyManager.smali" | head -n1)
+    p1=$(find "$JAR_OUT" -type f -name "PolicyManager.smali" | head -n1)
     if [[ -z $p1 ]]; then
         patch "Cảnh báo: không thấy PolicyManager.smali"
         return 0

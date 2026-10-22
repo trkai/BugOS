@@ -81,9 +81,14 @@ PowerKeeper=$(basename "$isPowerKeeper")
 $APKEDITOR b -f -i "$TMP/isPowerKeeper.apk.out" -o "$TMP/final/$PowerKeeper" >/dev/null 2>&1
 
 if [[ -f "$TMP/final/$PowerKeeper" && -n "$isPowerKeeperDIR" && "$isPowerKeeperDIR" == "$MAIN_FOLDER"/* ]]; then
-    # Xóa thư mục gốc để dọn luôn cả odex/vdex cũ tránh treo logo
-    rm -rf "$isPowerKeeperDIR"/*
-    cp -rf "$TMP/final/$PowerKeeper" "$isPowerKeeperDIR/"
+    # Xóa thư mục gốc để dọn luôn cả odex/vdex cũ tránh treo logo nếu là thư mục riêng
+    if [[ "$(basename "$isPowerKeeperDIR")" == "PowerKeeper"* ]]; then
+        rm -rf "$isPowerKeeperDIR"/*
+        cp -rf "$TMP/final/$PowerKeeper" "$isPowerKeeperDIR/"
+    else
+        rm -f "$isPowerKeeper"
+        cp -rf "$TMP/final/$PowerKeeper" "$isPowerKeeperDIR/"
+    fi
     rm -rf "$TMP"
     log_msg "Hoàn tất vá PowerKeeper.apk!"
 else

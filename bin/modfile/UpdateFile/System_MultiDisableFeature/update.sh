@@ -64,7 +64,43 @@ fix_themereset() {
     mods "Done"
 }
 
+# Optimize RAM, ZRAM, LMK & Compaction
+optimize_ram() {
+    mods "Optimizing RAM, ZRAM & LMK parameters..."
+    for p in "$BuildProp1" "$BuildProp2" "$BuildProp3" "$BuildProp4"; do
+        if [ -f "$p" ]; then
+            sed -i \
+                -e '/^ro\.vendor\.qti\.sys\.fw\.bg_apps_limit=/d' \
+                -e '/^ro\.vendor\.qti\.sys\.fw\.bservice_enable=/d' \
+                -e '/^ro\.vendor\.qti\.sys\.fw\.bservice_limit=/d' \
+                -e '/^ro\.vendor\.qti\.sys\.fw\.bservice_age=/d' \
+                -e '/^ro\.config\.max_starting_bg=/d' \
+                -e '/^persist\.sys\.zram_enabled=/d' \
+                -e '/^ro\.zram\.mark_idle_delay_mins=/d' \
+                -e '/^ro\.zram\.first_wb_delay_mins=/d' \
+                -e '/^ro\.zram\.periodic_wb_delay_hours=/d' \
+                -e '/^persist\.sys\.stability\.check_idle=/d' "$p"
+
+            [ -n "$(tail -c1 "$p")" ] && echo "" >> "$p"
+
+            {
+                echo "ro.vendor.qti.sys.fw.bg_apps_limit=64"
+                echo "ro.vendor.qti.sys.fw.bservice_enable=true"
+                echo "ro.vendor.qti.sys.fw.bservice_limit=16"
+                echo "ro.vendor.qti.sys.fw.bservice_age=5000"
+                echo "ro.config.max_starting_bg=8"
+                echo "persist.sys.zram_enabled=1"
+                echo "ro.zram.mark_idle_delay_mins=30"
+                echo "ro.zram.first_wb_delay_mins=120"
+                echo "ro.zram.periodic_wb_delay_hours=24"
+                echo "persist.sys.stability.check_idle=true"
+            } >> "$p"
+        fi
+    done
+}
+
 disable_memory_extenstion
 disable_privapp_control_enforce
 disable_privapp_control_disable
+optimize_ram
 fix_themereset

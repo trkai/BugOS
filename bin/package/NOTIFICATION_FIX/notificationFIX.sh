@@ -9,15 +9,15 @@ else
 
 mods "Bắt đầu Patch Notification Fix..."
 
-if [[ $AndroidVER == "12" ]];then
-    bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A12/RUN.SH
-elif [[ $AndroidVER == "13" ]];then
-    bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A13/RUN.SH
+if [[ $AndroidVER == "12" ]] || [[ $AndroidVER == "13" ]];then
+    [ -d "$WORK_DIR/bin/package/NOTIFICATION_FIX/A13" ] && bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A13/RUN.SH
 elif [[ $AndroidVER == "14" ]];then
     bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A14/RUN.SH
 elif [[ $AndroidVER == "15" ]];then
     bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A15/RUN.SH
+    bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A16/patchServices.sh
 elif [[ $AndroidVER -ge "16" ]];then
+    # Hỗ trợ toàn diện Android 16, Android 17+
     bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A16/RUN.SH
 fi
 

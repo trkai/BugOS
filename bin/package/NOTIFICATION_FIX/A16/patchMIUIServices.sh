@@ -11,8 +11,14 @@ if [[ ! -f "$JAR_SRC" ]]; then
 fi
 JAR_TMP="$work_dir/jar_temp"
 JAR_OUT="$JAR_TMP/$JAR_NAME.out"
-bak="java -jar $work_dir/bin/apktool/baksmaliv2.jar d --api 36"
-sma="java -jar $work_dir/bin/apktool/smaliv2.jar a --api 36"
+androidVER=$(cat "$work_dir/bin/ddevice/androidver.txt" 2>/dev/null | tr -d '\r\n ')
+if [ -n "$androidVER" ] && [ "$androidVER" -ge 12 ] 2>/dev/null; then
+    API_LEVEL=$((androidVER + 20))
+else
+    API_LEVEL=36
+fi
+bak="java -jar $work_dir/bin/apktool/baksmaliv2.jar d --api $API_LEVEL"
+sma="java -jar $work_dir/bin/apktool/smaliv2.jar a --api $API_LEVEL"
 
 # Các file smali sẽ đổi IS_INTERNATIONAL_BUILD -> IS_MIUI
 # (đã bao gồm 3 class bắt buộc: BroadcastQueueModernStubImpl, ProcessManagerService, ProcessSceneCleaner)

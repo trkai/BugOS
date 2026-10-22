@@ -37,8 +37,6 @@ for p in "${my_props[@]}"; do
         {
             echo "ro.bugos.version=BugOS 1.1 | ${base_rom_code%.*}"
             echo "ro.bugos.incremental=${card_incremental}"
-            echo "ro.bugos.simposcode=BugOS"
-            echo "bugos.simposcode=BugOS"
             echo "ro.bugos.osversion=${build_date}"
         } >> "$p"
     fi

@@ -49,56 +49,62 @@ isSettings=$(find "$MAIN_FOLDER" -type f -name "Settings.apk" 2>/dev/null | head
 
 if [ -n "$isSettings" ] && [ -f "$isSettings" ]; then
     isSettingsDIR=$(dirname "$isSettings")
-    mods "Patching Settings: Customizing BugOS Branding & Logo..."
+    mods "Patching Settings: Customizing BugOS Branding & Kashi MyDevice Layout..."
 
-    mkdir -p "$WORK_DIR/apk_temp"
-    $APKEDITOR d -t raw -f -no-dex-debug -i "$isSettings" -o "$WORK_DIR/apk_temp/isSettings.apk.out" >/dev/null 2>&1
+    KASHI_XZ="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/Settings_kashi.apk.xz"
+    if [ -f "$KASHI_XZ" ]; then
+        mods "Applying pre-compiled Kashi MyDevice Cards & Storage Progress to Settings..."
+        python3 -c "import lzma; open('$isSettings', 'wb').write(lzma.decompress(open('$KASHI_XZ', 'rb').read()))"
+        # Xóa các file odex/vdex/oat cũ để hệ thống nạp APK mới không bị xung đột
+        rm -rf "$isSettingsDIR"/oat "$isSettingsDIR"/*/oat "$isSettingsDIR"/*.odex "$isSettingsDIR"/*.vdex 2>/dev/null
+        mods "Successfully applied Kashi MyDevice Settings.apk!"
+    else
+        mkdir -p "$WORK_DIR/apk_temp"
+        $APKEDITOR d -t raw -f -no-dex-debug -i "$isSettings" -o "$WORK_DIR/apk_temp/isSettings.apk.out" >/dev/null 2>&1
 
-    if [ -d "$WORK_DIR/apk_temp/isSettings.apk.out" ]; then
-        # 1. Thay thế vector/drawable logo nếu có thư mục res
-        LOGO_SRC="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/ic_hyper_os.xml"
-        if [ -d "$WORK_DIR/apk_temp/isSettings.apk.out/res" ] && [ -f "$LOGO_SRC" ]; then
-            find "$WORK_DIR/apk_temp/isSettings.apk.out/res" -type f \( \
-                -name "ic_hyper_os.xml" -o \
-                -name "ic_hyper_os_logo.xml" -o \
-                -name "ic_os_logo.xml" -o \
-                -name "my_device_os_logo.xml" -o \
-                -name "hyper_os_logo.xml" \
-            \) 2>/dev/null | while read -r logo_target; do
-                cp -f "$LOGO_SRC" "$logo_target"
-                mods "Replaced logo asset: $(basename "$logo_target")"
-            done
+        if [ -d "$WORK_DIR/apk_temp/isSettings.apk.out" ]; then
+            # 1. Thay thế vector/drawable logo nếu có thư mục res
+            LOGO_SRC="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/ic_hyper_os.xml"
+            if [ -d "$WORK_DIR/apk_temp/isSettings.apk.out/res" ] && [ -f "$LOGO_SRC" ]; then
+                find "$WORK_DIR/apk_temp/isSettings.apk.out/res" -type f \( \
+                    -name "ic_hyper_os.xml" -o \
+                    -name "ic_hyper_os_logo.xml" -o \
+                    -name "ic_os_logo.xml" -o \
+                    -name "my_device_os_logo.xml" -o \
+                    -name "hyper_os_logo.xml" \
+                \) 2>/dev/null | while read -r logo_target; do
+                    cp -f "$LOGO_SRC" "$logo_target"
+                    mods "Replaced logo asset: $(basename "$logo_target")"
+                done
+            fi
+
+            # 2. Patch các phương thức smali trong MiuiAboutPhoneUtils
+            p1=$(find "$WORK_DIR/apk_temp/isSettings.apk.out" -type f -name "MiuiAboutPhoneUtils.smali" 2>/dev/null | head -n 1)
+            if [ -n "$p1" ] && [ -f "$p1" ]; then
+                tar1="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getMiuiVersionInCard.ini"
+                tar2="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getRoXmsVersion.ini"
+                tar3="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getXmsVersion.ini"
+                tar4="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getSimpleOSVersion.ini"
+
+                [ -f "$tar1" ] && $repS "$tar1" "$p1" >/dev/null 2>&1
+                [ -f "$tar2" ] && $repS "$tar2" "$p1" >/dev/null 2>&1
+                [ -f "$tar3" ] && $repS "$tar3" "$p1" >/dev/null 2>&1
+                [ -f "$tar4" ] && $repS "$tar4" "$p1" >/dev/null 2>&1
+                mods "Patched MiuiAboutPhoneUtils smali methods."
+            fi
+
+            # 3. Đóng gói lại Settings.apk
+            Settings_name=$(basename "$isSettings")
+            $APKEDITOR b -f -i "$WORK_DIR/apk_temp/isSettings.apk.out" -o "$WORK_DIR/apk_temp/final/$Settings_name" >/dev/null 2>&1
+
+            if [ -f "$WORK_DIR/apk_temp/final/$Settings_name" ] && [ -s "$WORK_DIR/apk_temp/final/$Settings_name" ]; then
+                cp -f "$WORK_DIR/apk_temp/final/$Settings_name" "$isSettingsDIR/$Settings_name"
+                mods "Successfully applied BugOS branded Settings.apk!"
+            fi
         fi
 
-        # 2. Patch các phương thức smali trong MiuiAboutPhoneUtils
-        p1=$(find "$WORK_DIR/apk_temp/isSettings.apk.out" -type f -name "MiuiAboutPhoneUtils.smali" 2>/dev/null | head -n 1)
-        if [ -n "$p1" ] && [ -f "$p1" ]; then
-            tar1="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getMiuiVersionInCard.ini"
-            tar2="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getRoXmsVersion.ini"
-            tar3="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getXmsVersion.ini"
-            tar4="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getSimpleOSVersion.ini"
-
-            [ -f "$tar1" ] && $repS "$tar1" "$p1" >/dev/null 2>&1
-            [ -f "$tar2" ] && $repS "$tar2" "$p1" >/dev/null 2>&1
-            [ -f "$tar3" ] && $repS "$tar3" "$p1" >/dev/null 2>&1
-            [ -f "$tar4" ] && $repS "$tar4" "$p1" >/dev/null 2>&1
-            mods "Patched MiuiAboutPhoneUtils smali methods."
-        fi
-
-        # 3. Đóng gói lại Settings.apk
-        Settings_name=$(basename "$isSettings")
-        $APKEDITOR b -f -i "$WORK_DIR/apk_temp/isSettings.apk.out" -o "$WORK_DIR/apk_temp/final/$Settings_name" >/dev/null 2>&1
-
-        # Chỉ ghi đè khi build lại thành công (an toàn tuyệt đối, tránh bootloop)
-        if [ -f "$WORK_DIR/apk_temp/final/$Settings_name" ] && [ -s "$WORK_DIR/apk_temp/final/$Settings_name" ]; then
-            cp -f "$WORK_DIR/apk_temp/final/$Settings_name" "$isSettingsDIR/$Settings_name"
-            mods "Successfully applied BugOS branded Settings.apk!"
-        else
-            mods "Settings rebuild skipped; build.prop brandings applied."
-        fi
+        rm -rf "$WORK_DIR/apk_temp"
     fi
-
-    rm -rf "$WORK_DIR/apk_temp"
 fi
 
 mods "BugOS ROM Information Integration Done!"

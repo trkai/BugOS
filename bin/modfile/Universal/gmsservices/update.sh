@@ -1,15 +1,44 @@
 work_dir=$(pwd)
 source $work_dir/functions.sh
-rom_os=$(cat $work_dir/bin/ddevice/rom_os.txt)
-androidVER=$(cat $work_dir/bin/ddevice/androidver.txt)
-regionTYPE=$(cat $work_dir/bin/ddevice/device_type.txt)
+rom_os=$(cat $work_dir/bin/ddevice/rom_os.txt 2>/dev/null)
+androidVER=$(cat $work_dir/bin/ddevice/androidver.txt 2>/dev/null | tr -d '\r\n ')
+regionTYPE=$(cat $work_dir/bin/ddevice/device_type.txt 2>/dev/null)
 MAIN_FOLDER="$work_dir/build/baserom/images"
 
 if [[ $regionTYPE == "China" ]]; then 
-  aria2c -q -d "$work_dir/bin/modfile/Universal/gmsservices/product/priv-app/GoogleVelvet_CTS/" -o GoogleVelvet_CTS.apk https://github.com/tiencv2006/nothingsvn_oplus-toolbuild/releases/download/oplus/GoogleVelvet_CTS.apk && info "Get File Successfully"
+  mods "Adding GMS & Enabling Google Services by default..."
   cp -rf $work_dir/bin/modfile/Universal/gmsservices/product/* $work_dir/build/baserom/images/product/
   cp -rf $work_dir/bin/modfile/Universal/gmsservices/system_ext/* $work_dir/build/baserom/images/system_ext/
-  echo "ro.miui.has_gmscore=1" >> $work_dir/build/baserom/images/system/system/build.prop
+  
+  # Xóa toàn bộ các tệp cấu hình hạn chế GMS của China ROM
+  find "$MAIN_FOLDER" -type f \( \
+      -name "cn.google.services.xml" -o \
+      -name "services.cn.google.xml" -o \
+      -name "cn_feature.xml" \
+  \) -exec rm -f {} + 2>/dev/null
+
+  # Kích hoạt sẵn Dịch vụ Google trong toàn bộ build.prop
+  for prop in "$MAIN_FOLDER/system/system/build.prop" "$MAIN_FOLDER/product/etc/build.prop" "$MAIN_FOLDER/system_ext/etc/build.prop"; do
+    if [ -f "$prop" ]; then
+      sed -i \
+          -e '/^ro\.miui\.has_gmscore=/d' \
+          -e '/^persist\.sys\.miui\.google\.services=/d' \
+          -e '/^persist\.sys\.google\.enable=/d' \
+          -e '/^ro\.com\.google\.clientidbase=/d' \
+          -e '/^ro\.opa\.eligible_device=/d' "$prop"
+
+      [ -n "$(tail -c1 "$prop")" ] && echo "" >> "$prop"
+
+      {
+          echo "ro.miui.has_gmscore=1"
+          echo "persist.sys.miui.google.services=1"
+          echo "persist.sys.google.enable=1"
+          echo "ro.com.google.clientidbase=android-xiaomi"
+          echo "ro.opa.eligible_device=true"
+      } >> "$prop"
+    fi
+  done
+
   if [[ $androidVER == "13" ]]; then 
     cp -rf $work_dir/bin/modfile/Universal/gmsservices/maps/A13/framework $work_dir/build/baserom/images/product/
   elif [[ $androidVER == "14" ]]; then
@@ -19,5 +48,5 @@ if [[ $regionTYPE == "China" ]]; then
   fi
   mods "Added GMS Done"
 else
-  mods "Detected Xiaomi Global ROM!Skipped Added GMS."
+  mods "Detected Xiaomi Global ROM! Skipped Added GMS."
 fi

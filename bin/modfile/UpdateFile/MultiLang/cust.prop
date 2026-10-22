@@ -12,3 +12,10 @@ lock_screen_show_notifications=1
 lock_screen_allow_private_notifications=1
 pref_key_enable_notification_body=1
 lock_screen_show_only_unseen_notifications=0
+
+# Kích hoạt sẵn Dịch vụ Google cơ bản (GMS) mặc định
+ro.miui.has_gmscore=1
+persist.sys.miui.google.services=1
+persist.sys.google.enable=1
+ro.com.google.clientidbase=android-xiaomi
+ro.opa.eligible_device=true

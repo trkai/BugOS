@@ -11,10 +11,10 @@ if [[ $deviceTYPE == "China" ]]; then
 
     # 1. Chọn gói Overlay tương thích theo phiên bản HyperOS
     if [[ "$rom_os" == "OS4" ]] || [[ "$rom_os" =~ ^OS[4-9] ]]; then
-        mods "Detected HyperOS 4+! Applying Tory Vietnamese Overlays (OS4)..."
+        mods "Detected HyperOS 4+! Applying BugOS Vietnamese Overlays (OS4)..."
         cp -rf $work_dir/bin/modfile/UpdateFile/MultiLang/updatesource_os4/* $MAIN_FOLDER/product/overlay/
     else
-        mods "Applying HyperOS/MIUI MultiLanguage Overlays (ZK Multi)..."
+        mods "Applying HyperOS/MIUI MultiLanguage Overlays (BugOS Multi)..."
         cp -rf $work_dir/bin/modfile/UpdateFile/MultiLang/updatesource/* $MAIN_FOLDER/product/overlay/
     fi
 

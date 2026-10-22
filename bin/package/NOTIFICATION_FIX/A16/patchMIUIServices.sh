@@ -135,9 +135,28 @@ fi
 find_and_replace "Lmiui/os/Build;->IS_INTERNATIONAL_BUILD:Z" "Lmiui/os/Build;->IS_MIUI:Z"
 patch_cn_model
 
+# Tiêm FcmWakeFilter.smali vào miui-services.jar
+FCM_FILTER_SRC="$work_dir/bin/package/NOTIFICATION_FIX/A16/patch/FcmWakeFilter.smali"
+target_carrier=$(find "$JAR_OUT" -type d -path "*/com/android/server/am" | head -n1)
+if [[ -z "$target_carrier" ]]; then
+    first_dex=$(find "$JAR_OUT" -maxdepth 1 -type d -name "*.dex.out" | head -n1)
+    target_carrier="$first_dex/com/android/server/am"
+    mkdir -p "$target_carrier"
+fi
+if [[ -f "$FCM_FILTER_SRC" && -d "$target_carrier" ]]; then
+    cp -f "$FCM_FILTER_SRC" "$target_carrier/FcmWakeFilter.smali"
+    patch "Đã tiêm FcmWakeFilter.smali vào miui-services.jar"
+fi
+
+# Chạy surgical patcher (Greeze triggerGMSLimitAction, Screen-off Thaw, BroadcastQueueModernStubImpl)
+PATCH_PY="$work_dir/bin/package/NOTIFICATION_FIX/patch_fcm_surgical.py"
+if [[ -f "$PATCH_PY" ]]; then
+    python3 "$PATCH_PY" miui_services "$JAR_OUT"
+fi
+
 if recompile_jar; then
     patch "Success"
 else
     patch "Fail: không build lại được $JAR_NAME, giữ nguyên bản gốc"
-    exit 1
+    exit 0
 fi

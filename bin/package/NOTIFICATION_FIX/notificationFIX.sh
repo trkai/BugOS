@@ -52,6 +52,16 @@ for prop in "$MAIN_FOLDER/system/system/build.prop" "$MAIN_FOLDER/product/etc/bu
     fi
 done
 
+# Tạo file cấu hình fcm_wake.conf mặc định cho FcmWakeFilter
+for fcm_conf_dir in "$MAIN_FOLDER/system/system/etc" "$MAIN_FOLDER/product/etc"; do
+    if [ -d "$fcm_conf_dir" ]; then
+        cat << 'EOF' > "$fcm_conf_dir/fcm_wake.conf"
+# HyperOS FCM Dynamic Wake Filter Configuration
+MODE=ALL
+EOF
+    fi
+done
+
 mods "Notification Fix hoàn tất!"
 
 fi

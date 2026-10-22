@@ -9,6 +9,20 @@ done < $WORK_DIR/bin/ddevice/DEBLOAT/APPLIST.txt
 rm -rf $WORK_DIR/build/baserom/images/product/etc/auto-install*
 rm -rf $WORK_DIR/build/baserom/images/product/app/Updater
 rm -rf $WORK_DIR/build/baserom/images/product/etc/permissions/cn.google.services.xml
+
+# Dọn dẹp các tệp log, cache, video hướng dẫn và firmware rác chiếm dung lượng
+info "Purging system caches, demo videos & tracking dumps..."
+for part in system product vendor system_ext odm; do
+    pdir="$WORK_DIR/build/baserom/images/$part"
+    if [ -d "$pdir" ]; then
+        rm -rf "$pdir"/media/video/* 2>/dev/null
+        rm -rf "$pdir"/media/theme_preview/* 2>/dev/null
+        rm -rf "$pdir"/etc/recovery-resource.dat 2>/dev/null
+        rm -rf "$pdir"/recovery-from-boot.p 2>/dev/null
+        find "$pdir" -type f \( -name "*.log" -o -name "*.bak" -o -name "*_old" \) -delete 2>/dev/null
+    fi
+done
+
 for debloat_app in "${debloat_apps[@]}"; do
     # Find the app directory in both system and product directories
     app_dirs=$(find build/baserom/images/system/ -type d -name "*$debloat_app*" 2>/dev/null)

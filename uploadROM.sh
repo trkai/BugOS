@@ -114,7 +114,7 @@ final_zip_name="BugOS_${device_code}_${base_rom_code}_${build_date}.zip"
 
 find "$target_out_dir" | xargs touch
 pushd "$target_out_dir/" || exit
-zip -r "$work_dir/out/$final_zip_name" ./*
+zip -r -1 "$work_dir/out/$final_zip_name" ./*
 popd || exit
 
 repack "Build completed"

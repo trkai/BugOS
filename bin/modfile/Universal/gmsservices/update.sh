@@ -79,6 +79,8 @@ setprop persist.sys.miui.google.services 1 || exit 0
 setprop persist.sys.google.enable 1
 mkdir -p /data/system 2>/dev/null
 touch "$MARK" 2>/dev/null
+# Dấu hiệu để kiểm tra: getprop persist.sys.bugos.gms_init  ->  1
+setprop persist.sys.bugos.gms_init 1
 exit 0
 EOS
       chmod 755 "$SYSBIN_DIR/bugos_gms_once.sh"

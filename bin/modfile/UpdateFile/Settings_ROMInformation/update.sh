@@ -53,6 +53,15 @@ if [ -n "$isSettings" ] && [ -f "$isSettings" ]; then
     if [ -f "$KASHI_XZ" ]; then
         mods "Applying pre-compiled Kashi MyDevice Cards & Storage Progress to Settings..."
         python3 -c "import lzma; open('$isSettings', 'wb').write(lzma.decompress(open('$KASHI_XZ', 'rb').read()))"
+
+        # Vá vector logo bị hỏng pathData (triệu chứng: logo Settings thành vệt đen méo).
+        # APK Kashi đóng gói sẵn có 5 file xiaomi_os_logo*.xml bị mất dấu cách giữa các
+        # toạ độ -> Android đọc ra số ~1e18 và tô kín viewport.
+        if [ -f "$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/patch_logo.py" ]; then
+            python3 "$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/patch_logo.py" "$isSettings" \
+                || warn "patch_logo.py thất bại - logo Settings có thể vẫn bị vỡ."
+        fi
+
         # Xóa các file odex/vdex/oat cũ để hệ thống nạp APK mới không bị xung đột
         rm -rf "$isSettingsDIR"/oat "$isSettingsDIR"/*/oat "$isSettingsDIR"/*.odex "$isSettingsDIR"/*.vdex 2>/dev/null
         mods "Successfully applied Kashi MyDevice Settings.apk!"

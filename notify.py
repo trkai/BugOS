@@ -103,6 +103,23 @@ def get_time_vn():
     vn_tz = timezone(timedelta(hours=7))
     return datetime.now(vn_tz).strftime("%H:%M · %d/%m/%Y")
 
+
+def cfg_get(key, default="false"):
+    """Đọc cờ trong config.env ở thư mục repo."""
+    if os.path.exists("config.env"):
+        try:
+            with open("config.env", "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    if k.strip() == key:
+                        return v.strip()
+        except Exception:
+            pass
+    return default
+
 STATUS_MAP = {
     "start":    (8,   "⏳", "Khởi động pipeline",  "Dọn môi trường, cài toolchain…"),
     "download": (20,  "⬇️", "Đang tải ROM gốc",      "Downloading base ROM…"),
@@ -347,6 +364,12 @@ if __name__ == "__main__":
         sys.exit(1)
 
     status = sys.argv[1]
+
+    # Chỉ gửi thông báo khi HOÀN TẤT (success / fail).
+    # Muốn bật lại thông báo tiến trình: NOTIFY_PROGRESS=true trong config.env
+    if status.lower() not in ("success", "fail") and cfg_get("NOTIFY_PROGRESS", "false").lower() != "true":
+        sys.exit(0)
+
     repo_name = sys.argv[2]
     rom_link = sys.argv[3]
     prefix = sys.argv[4] if len(sys.argv) > 4 else "build"
@@ -364,8 +387,13 @@ if __name__ == "__main__":
     build_id = os.environ.get("TELEGRAM_BUILD_ID")
 
     if not build_id:
-        random_digits = ''.join(random.choices(string.digits, k=8))
-        build_id = f"{prefix}_{random_digits}"
+        run_no = os.environ.get("GITHUB_RUN_NUMBER")
+        if run_no:
+            # Chế độ chỉ báo khi hoàn tất: lấy số run của Actions làm ID cho dễ đối chiếu
+            build_id = f"{prefix}_{run_no}"
+        else:
+            random_digits = ''.join(random.choices(string.digits, k=8))
+            build_id = f"{prefix}_{random_digits}"
         if "GITHUB_ENV" in os.environ:
             with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
                 f.write(f"TELEGRAM_BUILD_ID={build_id}\n")

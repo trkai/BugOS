@@ -3,6 +3,9 @@ source $WORK_DIR/functions.sh
 
 debloat_apps=()
 while IFS= read -r line || [[ -n "$line" ]]; do
+    line=$(printf '%s' "$line" | tr -d '\r')
+    # Bỏ dòng trống và chú thích: một dòng trống sẽ thành pattern "**" và xoá sạch ROM
+    [[ -z "${line// }" || "$line" == \#* ]] && continue
     debloat_apps+=("$line")
 done < $WORK_DIR/bin/ddevice/DEBLOAT/APPLIST.txt
 
@@ -40,4 +43,16 @@ for debloat_app in "${debloat_apps[@]}"; do
     done
 done
 info "Debloat Done"
+
+# ---------------------------------------------------------------------------
+# Xoá theo TÊN GÓI (package thật trong AndroidManifest) - dùng cho các app mà
+# tên thư mục không đoán được (vd com.miui.video có thể nằm ở MIUIVideo/MiVideo).
+# ---------------------------------------------------------------------------
+PKG_LIST="$WORK_DIR/bin/ddevice/DEBLOAT/APPLIST_PKGS.txt"
+PKG_TOOL="$WORK_DIR/bin/ddevice/DEBLOAT/debloat_pkgs.py"
+if [ -f "$PKG_LIST" ] && [ -f "$PKG_TOOL" ]; then
+    info "Debloat theo package name..."
+    python3 "$PKG_TOOL" "$WORK_DIR/build/baserom/images" "$PKG_LIST" || warn "Debloat theo package gặp lỗi (bỏ qua)."
+fi
+info "Debloat Done (package)"
 

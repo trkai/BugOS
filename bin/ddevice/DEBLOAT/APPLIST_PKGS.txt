@@ -1,0 +1,6 @@
+# BugOS - Danh sách app cần xoá theo TÊN GÓI (package name).
+# Khác với APPLIST.txt (so khớp tên thư mục), file này đọc package thật trong
+# AndroidManifest.xml nên xoá đúng app dù ROM đặt tên thư mục kiểu gì.
+# Mỗi dòng một package, dòng bắt đầu bằng # là chú thích.
+
+com.miui.video

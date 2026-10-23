@@ -102,5 +102,14 @@ optimize_ram() {
 disable_memory_extenstion
 disable_privapp_control_enforce
 disable_privapp_control_disable
-optimize_ram
+
+# Tinh chỉnh RAM/ZRAM/LMK chỉ chạy khi bật PERF_TURBO. Trước đây khối này luôn
+# chạy: bg_apps_limit=64 + zram writeback 30'/120'/24h ghi vào cả 4 file
+# build.prop -> giữ quá nhiều app nền, I/O và CPU tăng, máy nóng sau khi flash.
+if [ "$(cfg_get PERF_TURBO false)" == "true" ]; then
+    optimize_ram
+else
+    mods "PERF_TURBO=false -> giữ nguyên tham số RAM/ZRAM/LMK của ROM gốc."
+fi
+
 fix_themereset

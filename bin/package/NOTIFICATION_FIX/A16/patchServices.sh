@@ -88,7 +88,16 @@ if [[ -f "$FCM_FILTER_SRC" && -d "$target_carrier" ]]; then
 fi
 
 # 2. Gọi python patcher để tiêm hook applyFlags vào broadcastIntentLockedTraced
-python3 "$PATCH_PY" services "$JAR_OUT"
+if [[ -f "$PATCH_PY" ]]; then
+    python3 "$PATCH_PY" services "$JAR_OUT" || patch "CẢNH BÁO: không tiêm được hook applyFlags vào AMS"
+fi
+
+# Kiểm chứng hook đã thực sự nằm trong smali chưa (tránh build ra ROM không vá)
+if grep -rq "FcmWakeFilter;->applyFlags" "$JAR_OUT" 2>/dev/null; then
+    patch "Kiểm chứng: hook applyFlags ĐÃ có trong services.jar"
+else
+    patch "CẢNH BÁO: services.jar KHÔNG có hook applyFlags -> FCM fix sẽ không chạy"
+fi
 
 if recompile_jar; then
     patch "Vá services.jar (FCM Wake Filter) thành công!"

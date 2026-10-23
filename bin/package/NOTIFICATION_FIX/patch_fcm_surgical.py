@@ -155,28 +155,42 @@ def main():
 
     target_type = sys.argv[1]
     extracted_dir = sys.argv[2]
+    patched = 0
+    targets = 0
 
     if target_type == "services":
-        found = False
         for root, _, files in os.walk(extracted_dir):
             for file in files:
                 if file in ("BroadcastController.smali", "ActivityManagerService.smali"):
+                    targets += 1
                     if patch_broadcast_controller(os.path.join(root, file)):
-                        found = True
+                        patched += 1
                         break
-            if found:
+            if patched:
                 break
-        if not found:
-            print("[-] Khong tim thay target class trong services.jar")
+        if not targets:
+            print("[-] Khong tim thay BroadcastController/ActivityManagerService trong services.jar")
 
     elif target_type == "miui_services":
         for root, _, files in os.walk(extracted_dir):
             for file in files:
                 fpath = os.path.join(root, file)
                 if file == "GreezeManagerService.smali":
-                    patch_greeze_manager(fpath)
+                    targets += 1
+                    if patch_greeze_manager(fpath):
+                        patched += 1
                 elif file == "BroadcastQueueModernStubImpl.smali":
-                    patch_broadcast_queue_modern(fpath)
+                    targets += 1
+                    if patch_broadcast_queue_modern(fpath):
+                        patched += 1
+        if not targets:
+            print("[-] Khong tim thay GreezeManagerService/BroadcastQueueModernStubImpl "
+                  "trong miui-services.jar")
+
+    print(f"[=] Surgical patch ({target_type}): {patched}/{targets} hook da ap dung")
+    if patched == 0:
+        # Trả mã lỗi để shell biết mà cảnh báo, tránh build ra ROM "âm thầm" không vá
+        sys.exit(2)
 
 if __name__ == "__main__":
     main()

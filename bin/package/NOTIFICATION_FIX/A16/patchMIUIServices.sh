@@ -138,9 +138,6 @@ if ! decompile_jar; then
     exit 1
 fi
 
-find_and_replace "Lmiui/os/Build;->IS_INTERNATIONAL_BUILD:Z" "Lmiui/os/Build;->IS_MIUI:Z"
-patch_cn_model
-
 # Tiêm FcmWakeFilter.smali vào miui-services.jar
 FCM_FILTER_SRC="$work_dir/bin/package/NOTIFICATION_FIX/A16/patch/FcmWakeFilter.smali"
 target_carrier=$(find "$JAR_OUT" -type d -path "*/com/android/server/am" | head -n1)
@@ -152,12 +149,26 @@ fi
 if [[ -f "$FCM_FILTER_SRC" && -d "$target_carrier" ]]; then
     cp -f "$FCM_FILTER_SRC" "$target_carrier/FcmWakeFilter.smali"
     patch "Đã tiêm FcmWakeFilter.smali vào miui-services.jar"
+else
+    patch "CẢNH BÁO: không tiêm được FcmWakeFilter.smali (thiếu file hoặc thiếu package)"
 fi
 
 # Chạy surgical patcher (Greeze triggerGMSLimitAction, Screen-off Thaw, BroadcastQueueModernStubImpl)
+# PHẢI chạy TRƯỚC find_and_replace: nếu chạy sau, IS_INTERNATIONAL_BUILD đã bị
+# đổi thành IS_MIUI nên hook trong BroadcastQueueModernStubImpl không bao giờ khớp.
 PATCH_PY="$work_dir/bin/package/NOTIFICATION_FIX/patch_fcm_surgical.py"
 if [[ -f "$PATCH_PY" ]]; then
-    python3 "$PATCH_PY" miui_services "$JAR_OUT"
+    python3 "$PATCH_PY" miui_services "$JAR_OUT" || patch "CẢNH BÁO: surgical patcher không vá được gì (xem log [*] ở trên)"
+fi
+
+find_and_replace "Lmiui/os/Build;->IS_INTERNATIONAL_BUILD:Z" "Lmiui/os/Build;->IS_MIUI:Z"
+patch_cn_model
+
+# Kiểm chứng hook đã thực sự nằm trong smali chưa
+if grep -rq "FcmWakeFilter;->applyFlags" "$JAR_OUT" 2>/dev/null; then
+    patch "Kiểm chứng: hook FcmWakeFilter->applyFlags ĐÃ có trong miui-services.jar"
+else
+    patch "CẢNH BÁO: hook FcmWakeFilter->applyFlags KHÔNG có trong miui-services.jar"
 fi
 
 if recompile_jar; then

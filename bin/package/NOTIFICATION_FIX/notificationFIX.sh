@@ -3,21 +3,47 @@ source $WORK_DIR/functions.sh
 AndroidVER=$(cat $WORK_DIR/bin/ddevice/androidver.txt 2>/dev/null | tr -d '\r\n ')
 regionTYPE=$(cat $WORK_DIR/bin/ddevice/device_type.txt 2>/dev/null | tr -d '\r\n ')
 
+# ---------------------------------------------------------------------------
+# Xác định Android version CÓ FALLBACK.
+# Trước đây androidver.txt rỗng (key build.prop không khớp) làm KHÔNG nhánh nào
+# chạy -> máy vẫn trễ thông báo mà log build không báo lỗi gì.
+# ---------------------------------------------------------------------------
+if ! [[ "$AndroidVER" =~ ^[0-9]+$ ]]; then
+    sdk=$(cat "$WORK_DIR/bin/ddevice/sdkLevel.txt" 2>/dev/null | tr -d '\r\n ')
+    case "$sdk" in
+        33) AndroidVER=13 ;; 34) AndroidVER=14 ;; 35) AndroidVER=15 ;;
+        36) AndroidVER=16 ;; 37) AndroidVER=17 ;; *) AndroidVER="" ;;
+    esac
+fi
+if ! [[ "$AndroidVER" =~ ^[0-9]+$ ]]; then
+    case "$(cat "$WORK_DIR/bin/ddevice/rom_os.txt" 2>/dev/null | tr -d '\r\n ')" in
+        OS1) AndroidVER=14 ;;
+        OS2) AndroidVER=15 ;;
+        OS3) AndroidVER=16 ;;
+        OS4) AndroidVER=17 ;;
+    esac
+fi
+if ! [[ "$AndroidVER" =~ ^[0-9]+$ ]]; then
+    warn "Không đọc được Android version -> mặc định 16"
+    AndroidVER=16
+fi
+
 if [[ $regionTYPE == *"Global"* ]]; then
 warn "No Support Global ROM!Skipping..."
+echo "SKIP (Global ROM)" > "$WORK_DIR/bin/ddevice/notification_fix.txt"
 else
 
-mods "Bắt đầu Patch Notification Fix..."
+mods "Bắt đầu Patch Notification Fix... (Android $AndroidVER)"
 
-if [[ $AndroidVER == "12" ]] || [[ $AndroidVER == "13" ]];then
+if [ "$AndroidVER" -le 13 ]; then
     [ -d "$WORK_DIR/bin/package/NOTIFICATION_FIX/A13" ] && bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A13/RUN.SH
-elif [[ $AndroidVER == "14" ]];then
+elif [ "$AndroidVER" -eq 14 ];then
     bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A14/RUN.SH
-elif [[ $AndroidVER == "15" ]];then
+elif [ "$AndroidVER" -eq 15 ];then
     bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A15/RUN.SH
     bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A16/patchServices.sh
-elif [[ $AndroidVER -ge "16" ]];then
-    # Hỗ trợ toàn diện Android 16, Android 17+
+else
+    # Android 16, 17 trở lên
     bash $WORK_DIR/bin/package/NOTIFICATION_FIX/A16/RUN.SH
 fi
 
@@ -61,6 +87,60 @@ MODE=ALL
 EOF
     fi
 done
+
+# Ép lại prop MỖI LẦN BOOT.
+# build.prop chỉ được init áp dụng khi /data/property/persist.* chưa tồn tại,
+# nên flash đè (dirty flash) sẽ giữ nguyên giá trị cũ -> fix không có tác dụng.
+INIT_DIR="$MAIN_FOLDER/system/system/etc/init"
+if [ -d "$INIT_DIR" ]; then
+    cat << 'EOF' > "$INIT_DIR/bugos_notify.rc"
+# BugOS - ép cấu hình chống trễ thông báo sau mỗi lần boot
+on boot
+    setprop persist.sys.fcm.push.whitelist 1
+    setprop persist.sys.gz.enable false
+    setprop persist.sys.powmillet.enable false
+    setprop persist.sys.millet.handshake false
+    setprop persist.sys.millet.newversion false
+    setprop persist.sys.mms.kill_fas_cached_idle false
+    setprop persist.sys.smartpower.intercept.enable false
+    setprop persist.sys.spc.pressure.enable false
+    setprop persist.sys.spc.proc_restart_enable true
+EOF
+    mods "Đã thêm bugos_notify.rc (ép prop thông báo mỗi lần boot)"
+else
+    warn "Không thấy $INIT_DIR, bỏ qua init script ép prop."
+fi
+
+# ==================== KIỂM CHỨNG SAU KHI VÁ ====================
+# Trước đây nếu decompile/smali lỗi thì chỉ in 1 dòng Fail, build vẫn "xanh"
+# và ROM xuất xưởng vẫn trễ thông báo. Giờ ghi trạng thái ra file để soi lại.
+NF_STATUS=""
+svc_jar=$(find "$MAIN_FOLDER" -type f -name "services.jar" 2>/dev/null | head -n1)
+if [ -n "$svc_jar" ] && grep -aq "FcmWakeFilter" "$svc_jar"; then
+    NF_STATUS="${NF_STATUS}services.jar=OK "
+else
+    NF_STATUS="${NF_STATUS}services.jar=FAIL "
+fi
+
+miui_jar=$(find "$MAIN_FOLDER" -type f -name "miui-services.jar" 2>/dev/null | head -n1)
+if [ -n "$miui_jar" ] && grep -aq "FcmWakeFilter" "$miui_jar"; then
+    NF_STATUS="${NF_STATUS}miui-services.jar=OK "
+else
+    NF_STATUS="${NF_STATUS}miui-services.jar=FAIL "
+fi
+
+pk=$(find "$MAIN_FOLDER" -type f -name "PowerKeeper.apk" 2>/dev/null | head -n1)
+if [ -n "$pk" ]; then
+    NF_STATUS="${NF_STATUS}PowerKeeper=co "
+else
+    NF_STATUS="${NF_STATUS}PowerKeeper=khong-co "
+fi
+
+echo "$NF_STATUS" > "$WORK_DIR/bin/ddevice/notification_fix.txt"
+mods "Notification Fix: $NF_STATUS"
+if [[ $NF_STATUS == *FAIL* ]]; then
+    warn "Có bước patch thất bại -> thông báo có thể VẪN trễ. Xem log decompile/smali phía trên."
+fi
 
 mods "Notification Fix hoàn tất!"
 

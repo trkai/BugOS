@@ -57,8 +57,13 @@ if [ -n "$isSettings" ] && [ -f "$isSettings" ]; then
         # Vá vector logo bị hỏng pathData (triệu chứng: logo Settings thành vệt đen méo).
         # APK Kashi đóng gói sẵn có 5 file xiaomi_os_logo*.xml bị mất dấu cách giữa các
         # toạ độ -> Android đọc ra số ~1e18 và tô kín viewport.
-        if [ -f "$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/patch_logo.py" ]; then
-            python3 "$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/patch_logo.py" "$isSettings" \
+        # logo_ref_bugos.json: wordmark "Xiaomi BugOS" (mặc định)
+        # logo_ref.json:       wordmark gốc "Xiaomi HyperOS" (để quay lại)
+        LOGO_DIR="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation"
+        LOGO_REF="logo_ref.json"
+        [ -f "$LOGO_DIR/logo_ref_bugos.json" ] && LOGO_REF="logo_ref_bugos.json"
+        if [ -f "$LOGO_DIR/patch_logo.py" ]; then
+            python3 "$LOGO_DIR/patch_logo.py" "$isSettings" --ref "$LOGO_REF" --force \
                 || warn "patch_logo.py thất bại - logo Settings có thể vẫn bị vỡ."
         fi
 

@@ -19,9 +19,13 @@ CÁCH VÁ
 
 DÙNG
     python3 patch_logo.py <Settings.apk | Settings.apk.xz> [--dry-run] [--no-hyperos]
+                          [--ref logo_ref_bugos.json] [--force]
 
     --dry-run      chỉ kiểm tra, không ghi file
     --no-hyperos   chỉ giữ chữ "Xiaomi", để trống phần "HyperOS"
+    --ref <file>   dùng bộ vector khác (mặc định logo_ref.json = Xiaomi HyperOS;
+                   logo_ref_bugos.json = Xiaomi BugOS)
+    --force        ghi đè cả khi file không bị hỏng (dùng để đổi wordmark)
 """
 
 import io
@@ -277,7 +281,7 @@ def fmt(v, nd=2):
 # --------------------------------------------------------------------------
 # Vá APK
 # --------------------------------------------------------------------------
-def patch_apk(apk_bytes, ref, keep_hyperos=True, dry=False):
+def patch_apk(apk_bytes, ref, keep_hyperos=True, dry=False, force=False):
     src = zipfile.ZipFile(io.BytesIO(apk_bytes))
     targets = [n for n in src.namelist() if LOGO_RE.match(n)]
     if not targets:
@@ -293,9 +297,9 @@ def patch_apk(apk_bytes, ref, keep_hyperos=True, dry=False):
             print('  - %-45s bỏ qua (%s)' % (name, info))
             continue
         bad = any(x[3] for x in info)
-        if bad:
+        if bad or force:
             fixed += 1
-        print('  %s %-45s %s' % ('[FIX]' if bad else '[OK ]', name,
+        print('  %s %-45s %s' % ('[FIX]' if bad else ('[SET]' if force else '[OK ]'), name,
                                  ', '.join('path%d: %d -> %d ký tự%s' % (o, a, b, ' (HỎNG)' if c else '')
                                            for o, a, b, c in info)))
         patched[name] = new
@@ -321,17 +325,36 @@ def patch_apk(apk_bytes, ref, keep_hyperos=True, dry=False):
 def main():
     args = [a for a in sys.argv[1:]]
     dry = '--dry-run' in args
+    force = '--force' in args
     keep_hyperos = '--no-hyperos' not in args
-    args = [a for a in args if not a.startswith('--')]
+    ref_path = None
+    for i, a in enumerate(args):
+        if a == '--ref' and i + 1 < len(args):
+            ref_path = args[i + 1]
+    skip_next = False
+    clean = []
+    for a in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if a == '--ref':
+            skip_next = True
+            continue
+        if not a.startswith('--'):
+            clean.append(a)
+    args = clean
     if not args:
         print(__doc__)
         return 1
     path = args[0]
     here = os.path.dirname(os.path.abspath(__file__))
-    ref = json.load(open(os.path.join(here, 'logo_ref.json'), encoding='utf-8'))
-
-    is_xz = path.lower().endswith('.xz')
+    ref_file = ref_path if ref_path else os.path.join(here, 'logo_ref.json')
+    if not os.path.isabs(ref_file):
+        ref_file = os.path.join(here, ref_file)
+    ref = json.load(open(ref_file, encoding='utf-8'))
     print('>> %s' % path)
+    print('>> ref: %s' % os.path.basename(ref_file))
+    is_xz = path.lower().endswith('.xz')
     if is_xz:
         with lzma.open(path, 'rb') as f:
             apk = f.read()
@@ -339,12 +362,12 @@ def main():
         with open(path, 'rb') as f:
             apk = f.read()
 
-    new_apk, fixed = patch_apk(apk, ref, keep_hyperos, dry)
+    new_apk, fixed = patch_apk(apk, ref, keep_hyperos, dry, force)
     if dry:
         print('>> Dry-run: %d file cần vá' % fixed)
         return 0
     if fixed == 0:
-        print('>> Không có file nào bị hỏng - giữ nguyên.')
+        print('>> Không có file nào bị hỏng - giữ nguyên (dùng --force để đổi wordmark).')
         return 0
 
     if is_xz:

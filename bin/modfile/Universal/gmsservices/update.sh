@@ -59,6 +59,41 @@ elif [[ $regionTYPE == "China" ]]; then
   else
     cp -rf $work_dir/bin/modfile/Universal/gmsservices/maps/A15/framework $work_dir/build/baserom/images/product/
   fi
+
+  # ---------------------------------------------------------------------------
+  # Bật Dịch vụ Google MỘT LẦN sau khi flash.
+  # build.prop chỉ được init áp dụng khi /data/property/persist.* CHƯA có giá trị,
+  # nên flash đè (không factory reset) sẽ giữ giá trị 0 cũ -> toggle vẫn tắt và
+  # người dùng phải bật tay. Script dưới đây chạy ở post-fs-data, chỉ set prop
+  # đúng 1 lần (đánh dấu bằng file), sau đó người dùng tắt được bình thường.
+  # ---------------------------------------------------------------------------
+  INIT_DIR="$MAIN_FOLDER/system/system/etc/init"
+  SYSBIN_DIR="$MAIN_FOLDER/system/system/bin"
+  if [ -d "$INIT_DIR" ] && [ -d "$SYSBIN_DIR" ]; then
+      cat > "$SYSBIN_DIR/bugos_gms_once.sh" << 'EOS'
+#!/system/bin/sh
+# BugOS: bật Dịch vụ Google mặc định đúng 1 lần sau khi flash
+MARK=/data/system/bugos_gms_once.done
+[ -f "$MARK" ] && exit 0
+setprop persist.sys.miui.google.services 1 || exit 0
+setprop persist.sys.google.enable 1
+mkdir -p /data/system 2>/dev/null
+touch "$MARK" 2>/dev/null
+exit 0
+EOS
+      chmod 755 "$SYSBIN_DIR/bugos_gms_once.sh"
+
+      cat > "$INIT_DIR/bugos_gms.rc" << 'EOR'
+# BugOS - bật Dịch vụ Google mặc định sau khi flash (kể cả flash đè)
+on post-fs-data
+    exec -- /system/bin/sh /system/bin/bugos_gms_once.sh
+EOR
+      chmod 644 "$INIT_DIR/bugos_gms.rc"
+      mods "Đã thêm bugos_gms.rc + bugos_gms_once.sh (bật Google services 1 lần)"
+  else
+      warn "Không thấy $INIT_DIR hoặc $SYSBIN_DIR -> bỏ qua script bật GMS."
+  fi
+
   mods "Added GMS Done"
 else
   mods "Detected Xiaomi Global ROM! Skipped Added GMS."

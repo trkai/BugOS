@@ -1,0 +1,4 @@
+# File build / sao lưu cục bộ - không commit
+*.bak
+*.xz.bak
+/out/

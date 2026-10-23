@@ -217,15 +217,18 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
                 "• Tối ưu hóa hiệu năng và gỡ bỏ ứng dụng rác hệ thống"
             )
 
-        res.append("")
-        res.append("📝 <b>Changelog:</b>")
+        cl_lines = ["📝 <b>Changelog:</b>"]
         for cl_line in changelog_content.strip().split("\n"):
             cl_line = cl_line.strip()
             if cl_line:
                 if not cl_line.startswith("•") and not cl_line.startswith("-") and not cl_line.startswith("*"):
-                    res.append(f"• {html_esc(cl_line)}")
+                    cl_lines.append(f"• {html_esc(cl_line)}")
                 else:
-                    res.append(f"{html_esc(cl_line)}")
+                    cl_lines.append(f"{html_esc(cl_line)}")
+
+        cl_block = "\n".join(cl_lines)
+        res.append("")
+        res.append(f"<blockquote expandable>{cl_block}</blockquote>")
 
         return "\n".join(res)
 

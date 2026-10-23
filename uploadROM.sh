@@ -126,8 +126,9 @@ echo "$final_zip_name" > $work_dir/bin/ddevice/output_zip.txt
 if [ -f "$work_dir/out/$final_zip_name" ]; then
     final_bytes=$(stat -c%s "$work_dir/out/$final_zip_name" 2>/dev/null || du -sb "$work_dir/out/$final_zip_name" | awk '{print $1}')
     final_mb=$((final_bytes / 1024 / 1024))
-    echo "${final_mb} MB" > "$work_dir/bin/ddevice/rom_size.txt"
-    repack "Kích thước tệp ROM hoàn chỉnh: ${final_mb} MB ($final_bytes bytes)"
+    final_gb=$(awk "BEGIN {printf \"%.1f\", $final_bytes/1000000000}")
+    echo "${final_gb} GB (${final_mb} MB)" > "$work_dir/bin/ddevice/rom_size.txt"
+    repack "Kích thước tệp ROM hoàn chỉnh: ${final_gb} GB (${final_mb} MB) ($final_bytes bytes)"
 
     # Giải phóng thư mục staging ngay để máy chủ không bị đầy ổ đĩa trước khi upload
     rm -rf "$target_out_dir" 2>/dev/null || true

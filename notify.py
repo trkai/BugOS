@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import requests
@@ -66,6 +67,37 @@ def bar_for(pct):
     n = (pct + 5) // 10
     n = max(0, min(10, n))
     return "▬" * n + "▭" * (10 - n)
+
+
+def format_size_gb(value, default=""):
+    """Chỉ hiển thị số GB, bỏ phần MB/bytes đi kèm.
+
+    '8.0 GB (7642 MB)' -> '8.0 GB'
+    '7642 MB'          -> '7.5 GB'
+    '7642000000'       -> '7.6 GB'
+    """
+    if not value:
+        return default
+    s = str(value).strip().replace(",", ".")
+    m = re.search(r'([0-9]+(?:\.[0-9]+)?)\s*GB', s, re.I)
+    if m:
+        return f"{m.group(1)} GB"
+    m = re.search(r'([0-9]+(?:\.[0-9]+)?)\s*MB', s, re.I)
+    if m:
+        try:
+            return f"{float(m.group(1)) / 1024.0:.1f} GB"
+        except Exception:
+            return s
+    m = re.search(r'([0-9]+(?:\.[0-9]+)?)', s)
+    if m:
+        try:
+            num = float(m.group(1))
+        except Exception:
+            return s
+        if num > 1024 * 1024:          # coi là bytes
+            return f"{num / 1e9:.1f} GB"
+        return f"{num:g} GB"
+    return s
 
 def get_time_vn():
     vn_tz = timezone(timedelta(hours=7))
@@ -179,6 +211,8 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
     size_info = read_file_if_exists("bin/ddevice/rom_size.txt")
     if not size_info:
         size_info = read_file_if_exists("bin/ddevice/super_size_human.txt")
+    # Chỉ hiển thị GB (bỏ phần "MB" đi kèm trong file)
+    size_info = format_size_gb(size_info)
     if size_info:
         info_items.append(f"📦 Dung lượng: <code>{html_esc(size_info)}</code>")
 
@@ -191,7 +225,7 @@ def build_message(status, rom_link, build_id, builder_name, run_url=""):
         if not v_show:
             v_show = "HyperOS"
 
-        s_show = size_info if size_info else "10720 MB"
+        s_show = size_info if size_info else "Không rõ"
 
         res = [
             f"<blockquote>{html_esc(c_show)}\n{html_esc(v_show)}</blockquote>",

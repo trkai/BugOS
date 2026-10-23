@@ -4,3 +4,4 @@
 # Mỗi dòng một package, dòng bắt đầu bằng # là chú thích.
 
 com.miui.video
+com.xiaomi.payment

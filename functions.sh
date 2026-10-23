@@ -18,6 +18,14 @@ mods() {
     fi
 }
 
+# Đọc cờ bật/tắt trong config.env. Không có file hoặc không có key -> dùng mặc định.
+# Dùng: if [[ "$(cfg_get PERF_TURBO false)" == "true" ]]; then ...
+cfg_get() {
+    local key="$1" def="${2:-false}" val
+    val=$(grep -m1 "^[[:space:]]*${key}[[:space:]]*=" "${WORK_DIR:-$(pwd)}/config.env" 2>/dev/null | cut -d '=' -f 2 | tr -d '\r\n ')
+    echo "${val:-$def}"
+}
+
 info() {
     if [ "$#" -eq 1 ] ; then
         echo -e [INFO] - $1

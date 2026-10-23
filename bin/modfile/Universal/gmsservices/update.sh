@@ -1,11 +1,24 @@
 work_dir=$(pwd)
 source $work_dir/functions.sh
-rom_os=$(cat $work_dir/bin/ddevice/rom_os.txt 2>/dev/null)
+rom_os=$(cat $work_dir/bin/ddevice/rom_os.txt 2>/dev/null | tr -d '\r\n ')
 androidVER=$(cat $work_dir/bin/ddevice/androidver.txt 2>/dev/null | tr -d '\r\n ')
-regionTYPE=$(cat $work_dir/bin/ddevice/device_type.txt 2>/dev/null)
+regionTYPE=$(cat $work_dir/bin/ddevice/device_type.txt 2>/dev/null | tr -d '\r\n ')
+base_rom_code=$(cat $work_dir/bin/ddevice/base_rom_code.txt 2>/dev/null | tr -d '\r\n ')
 MAIN_FOLDER="$work_dir/build/baserom/images"
 
-if [[ $regionTYPE == "China" ]]; then 
+# Region rỗng hoặc dính CRLF -> tự suy ra từ mã ROM, tránh bỏ qua GMS trong im lặng
+if [ -z "$regionTYPE" ]; then
+  if echo "$base_rom_code" | grep -qiE 'CNXM|_CN|CN$'; then
+    regionTYPE="China"
+  else
+    regionTYPE="Global"
+  fi
+  mods "Region trống -> tự nhận diện: $regionTYPE (theo $base_rom_code)"
+fi
+
+if [ "$(cfg_get GMS_DEFAULT true)" != "true" ]; then
+  mods "GMS_DEFAULT=false trong config.env -> bỏ qua bước thêm GMS."
+elif [[ $regionTYPE == "China" ]]; then
   mods "Adding GMS & Enabling Google Services by default..."
   cp -rf $work_dir/bin/modfile/Universal/gmsservices/product/* $work_dir/build/baserom/images/product/
   cp -rf $work_dir/bin/modfile/Universal/gmsservices/system_ext/* $work_dir/build/baserom/images/system_ext/

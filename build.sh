@@ -37,6 +37,31 @@ mkdir -p $work_dir/out
 python3 $work_dir/notify.py download "$repo_name" "$baserom" "$prefix_id" "$builder_name" "$builder_id"
 source "$work_dir/bin/ddevice/getROM.sh" "$baserom"
 
+# ==================== CHUẨN HOÁ DỮ LIỆU NHẬN DIỆN THIẾT BỊ ====================
+# Toàn bộ mod (GMS, Việt hoá, CTS, Notification Fix, Settings...) đều so sánh
+# chuỗi dạng [[ $regionTYPE == "China" ]]. Nếu file có ký tự \r (CRLF khi build
+# trên Windows) hoặc bị rỗng thì mọi mod đó bị BỎ QUA TRONG IM LẶNG.
+# -> Chuẩn hoá ngay sau khi nhận diện, và tự suy ra region nếu trống.
+normalize_info() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    tr -d '\r' < "$f" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' > "$f.tmp" && mv -f "$f.tmp" "$f"
+}
+for info_file in device_code device_f device_type rom_os base_rom_code androidver os_type; do
+    normalize_info "$work_dir/bin/ddevice/${info_file}.txt"
+done
+
+if [ ! -s "$work_dir/bin/ddevice/device_type.txt" ]; then
+    if grep -qiE 'CNXM|_CN|CN$' "$work_dir/bin/ddevice/base_rom_code.txt" 2>/dev/null; then
+        echo "China" > "$work_dir/bin/ddevice/device_type.txt"
+    else
+        echo "Global" > "$work_dir/bin/ddevice/device_type.txt"
+    fi
+    unpack "Region trống -> tự suy ra: $(cat "$work_dir/bin/ddevice/device_type.txt")"
+fi
+# ============================================================================
+
+
 # ==================== CHUẨN HÓA TÊN FILE ZIP ====================
 if [[ ! -f "$baserom" ]]; then
     found_zip=$(ls -S $work_dir/*.zip 2>/dev/null | head -n 1)

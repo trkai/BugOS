@@ -2,3 +2,8 @@
 *.bak
 *.xz.bak
 /out/
+
+# APK Settings đóng gói sẵn (~77 MB). Build mặc định patch trực tiếp
+# Settings.apk của ROM (xem USE_KASHI_SETTINGS trong config.env), nên file này
+# chỉ dùng khi bật chế độ Kashi và không cần nằm trong git.
+*.apk.xz

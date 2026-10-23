@@ -45,74 +45,75 @@ done
 # Patch Settings.apk để hiển thị logo và thông tin bản build
 isSettings=$(find "$MAIN_FOLDER" -type f -name "Settings.apk" 2>/dev/null | head -n 1)
 
+LOGO_DIR="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation"
+LOGO_REF="logo_ref.json"
+[ -f "$LOGO_DIR/logo_ref_bugos.json" ] && LOGO_REF="logo_ref_bugos.json"
+
 if [ -n "$isSettings" ] && [ -f "$isSettings" ]; then
     isSettingsDIR=$(dirname "$isSettings")
-    mods "Patching Settings: Customizing BugOS Branding & Kashi MyDevice Layout..."
+    Settings_name=$(basename "$isSettings")
+    KASHI_XZ="$LOGO_DIR/Settings_kashi.apk.xz"
+    USE_KASHI="$(cfg_get USE_KASHI_SETTINGS false)"
 
-    KASHI_XZ="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/Settings_kashi.apk.xz"
-    if [ -f "$KASHI_XZ" ]; then
+    # ------------------------------------------------------------------
+    # CHẾ ĐỘ A (mặc định): mod đè thẳng vào Settings.apk CỦA CHÍNH ROM.
+    #   decompile -> patch smali -> build lại -> vá logo trên binary XML.
+    #   Không cần file APK đóng gói sẵn 77 MB nằm trong git.
+    # CHẾ ĐỘ B (USE_KASHI_SETTINGS=true): dùng APK Kashi đóng gói sẵn
+    #   (có thêm card MyDevice + thanh dung lượng) nếu file tồn tại.
+    # ------------------------------------------------------------------
+    if [ "$USE_KASHI" == "true" ] && [ -f "$KASHI_XZ" ]; then
         mods "Applying pre-compiled Kashi MyDevice Cards & Storage Progress to Settings..."
         python3 -c "import lzma; open('$isSettings', 'wb').write(lzma.decompress(open('$KASHI_XZ', 'rb').read()))"
 
-        # Vá vector logo bị hỏng pathData (triệu chứng: logo Settings thành vệt đen méo).
-        # APK Kashi đóng gói sẵn có 5 file xiaomi_os_logo*.xml bị mất dấu cách giữa các
-        # toạ độ -> Android đọc ra số ~1e18 và tô kín viewport.
-        # logo_ref_bugos.json: wordmark "Xiaomi BugOS" (mặc định)
-        # logo_ref.json:       wordmark gốc "Xiaomi HyperOS" (để quay lại)
-        LOGO_DIR="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation"
-        LOGO_REF="logo_ref.json"
-        [ -f "$LOGO_DIR/logo_ref_bugos.json" ] && LOGO_REF="logo_ref_bugos.json"
+        # Vá vector logo (APK Kashi đóng gói sẵn có 5 file xiaomi_os_logo*.xml bị hỏng pathData)
         if [ -f "$LOGO_DIR/patch_logo.py" ]; then
             python3 "$LOGO_DIR/patch_logo.py" "$isSettings" --ref "$LOGO_REF" --force \
                 || warn "patch_logo.py thất bại - logo Settings có thể vẫn bị vỡ."
         fi
 
-        # Xóa các file odex/vdex/oat cũ để hệ thống nạp APK mới không bị xung đột
         rm -rf "$isSettingsDIR"/oat "$isSettingsDIR"/*/oat "$isSettingsDIR"/*.odex "$isSettingsDIR"/*.vdex 2>/dev/null
         mods "Successfully applied Kashi MyDevice Settings.apk!"
     else
-        mkdir -p "$WORK_DIR/apk_temp"
-        $APKEDITOR d -t raw -f -no-dex-debug -i "$isSettings" -o "$WORK_DIR/apk_temp/isSettings.apk.out" >/dev/null 2>&1
+        mods "Patching Settings.apk của ROM trực tiếp (logo BugOS + thông tin bản dựng)..."
+        rm -rf "$WORK_DIR/apk_temp"
+        mkdir -p "$WORK_DIR/apk_temp/final"
+        SET_OUT="$WORK_DIR/apk_temp/isSettings.apk.out"
 
-        if [ -d "$WORK_DIR/apk_temp/isSettings.apk.out" ]; then
-            # 1. Thay thế vector/drawable logo nếu có thư mục res
-            LOGO_SRC="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/ic_hyper_os.xml"
-            if [ -d "$WORK_DIR/apk_temp/isSettings.apk.out/res" ] && [ -f "$LOGO_SRC" ]; then
-                find "$WORK_DIR/apk_temp/isSettings.apk.out/res" -type f \( \
-                    -name "ic_hyper_os.xml" -o \
-                    -name "ic_hyper_os_logo.xml" -o \
-                    -name "ic_os_logo.xml" -o \
-                    -name "my_device_os_logo.xml" -o \
-                    -name "hyper_os_logo.xml" \
-                \) 2>/dev/null | while read -r logo_target; do
-                    cp -f "$LOGO_SRC" "$logo_target"
-                    mods "Replaced logo asset: $(basename "$logo_target")"
-                done
-            fi
+        $APKEDITOR d -t raw -f -no-dex-debug -i "$isSettings" -o "$SET_OUT" >/dev/null 2>&1
 
-            # 2. Patch các phương thức smali trong MiuiAboutPhoneUtils
-            p1=$(find "$WORK_DIR/apk_temp/isSettings.apk.out" -type f -name "MiuiAboutPhoneUtils.smali" 2>/dev/null | head -n 1)
+        if [ -d "$SET_OUT" ]; then
+            # 1. Patch smali: thông tin bản dựng hiển thị trong card
+            p1=$(find "$SET_OUT" -type f -name "MiuiAboutPhoneUtils.smali" 2>/dev/null | head -n 1)
             if [ -n "$p1" ] && [ -f "$p1" ]; then
-                tar1="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getMiuiVersionInCard.ini"
-                tar2="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getRoXmsVersion.ini"
-                tar3="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getXmsVersion.ini"
-                tar4="$WORK_DIR/bin/modfile/UpdateFile/Settings_ROMInformation/getSimpleOSVersion.ini"
-
-                [ -f "$tar1" ] && $repS "$tar1" "$p1" >/dev/null 2>&1
-                [ -f "$tar2" ] && $repS "$tar2" "$p1" >/dev/null 2>&1
-                [ -f "$tar3" ] && $repS "$tar3" "$p1" >/dev/null 2>&1
-                [ -f "$tar4" ] && $repS "$tar4" "$p1" >/dev/null 2>&1
-                mods "Patched MiuiAboutPhoneUtils smali methods."
+                for ini in getMiuiVersionInCard getRoXmsVersion getXmsVersion getSimpleOSVersion; do
+                    ini_f="$LOGO_DIR/$ini.ini"
+                    [ -f "$ini_f" ] && $repS "$ini_f" "$p1" >/dev/null 2>&1
+                done
+                mods "Đã patch MiuiAboutPhoneUtils.smali"
+            else
+                warn "Không thấy MiuiAboutPhoneUtils.smali - bỏ qua patch smali"
             fi
 
-            # 3. Đóng gói lại Settings.apk
-            Settings_name=$(basename "$isSettings")
-            $APKEDITOR b -f -i "$WORK_DIR/apk_temp/isSettings.apk.out" -o "$WORK_DIR/apk_temp/final/$Settings_name" >/dev/null 2>&1
+            # 2. Build lại APK
+            $APKEDITOR b -f -i "$SET_OUT" -o "$WORK_DIR/apk_temp/final/$Settings_name" >/dev/null 2>&1
 
             if [ -f "$WORK_DIR/apk_temp/final/$Settings_name" ] && [ -s "$WORK_DIR/apk_temp/final/$Settings_name" ]; then
-                cp -f "$WORK_DIR/apk_temp/final/$Settings_name" "$isSettingsDIR/$Settings_name"
-                mods "Successfully applied BugOS branded Settings.apk!"
+                # 3. Vá logo trên binary XML của APK vừa build (không cần sửa res trước khi build)
+                if [ -f "$LOGO_DIR/patch_logo.py" ]; then
+                    python3 "$LOGO_DIR/patch_logo.py" "$WORK_DIR/apk_temp/final/$Settings_name" \
+                        --ref "$LOGO_REF" --force \
+                        || warn "patch_logo.py thất bại - logo Settings có thể không đổi."
+                fi
+
+                cp -f "$WORK_DIR/apk_temp/final/$Settings_name" "$isSettings"
+                rm -rf "$isSettingsDIR"/oat "$isSettingsDIR"/*/oat "$isSettingsDIR"/*.odex "$isSettingsDIR"/*.vdex 2>/dev/null
+                mods "Đã đè Settings.apk của ROM: logo BugOS + thông tin bản dựng."
+            else
+                warn "Build lại Settings.apk thất bại - giữ nguyên bản gốc của ROM."
             fi
+        else
+            warn "Không decompile được Settings.apk - giữ nguyên bản gốc của ROM."
         fi
 
         rm -rf "$WORK_DIR/apk_temp"

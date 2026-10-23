@@ -5,3 +5,4 @@
 
 com.miui.video
 com.xiaomi.payment
+com.miui.bugreport

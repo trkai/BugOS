@@ -2,3 +2,6 @@
 *.bak
 *.xz.bak
 /out/
+
+# Trạng thái do uploadROM.sh sinh ra sau mỗi lần build - không commit
+bin/ddevice/rom_size.txt

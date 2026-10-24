@@ -3,5 +3,9 @@
 *.xz.bak
 /out/
 
-# Trạng thái do uploadROM.sh sinh ra sau mỗi lần build - không commit
-bin/ddevice/rom_size.txt
+# Trạng thái build sinh ra trong bin/ddevice (getROM.sh, fetchINFO.sh, build.sh,
+# packROM.sh, uploadROM.sh): androidver, base_rom_code, device_code, device_f,
+# device_type, fstype, name_devices, os_code, os_type, rom_os, romtype,
+# sdkLevel, superSize, ximi_type, device_name, output_zip, changelog, rom_size...
+# Tất cả là output tạm -> không commit. File .txt trong data/ vẫn được track.
+bin/ddevice/*.txt

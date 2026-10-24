@@ -72,6 +72,12 @@ cp -rf $work_dir/bin/script2flash/cust.img "$target_out_dir/images/" 2>/dev/null
 mkdir -p "$target_out_dir/META-INF/Data"
 echo "$device_f" > "$target_out_dir/META-INF/Data/DeviceCode"
 
+# Ngày đóng gói: PHẢI gán trước khi sinh changelog mặc định.
+# Trước đây biến này được gán ở dưới (mục đặt tên zip) nên ${build_date}
+# trong changelog luôn rỗng; gán ở đây còn đảm bảo changelog và tên zip
+# dùng cùng một ngày kể cả khi build chạy qua nửa đêm.
+build_date=$(TZ=Asia/Ho_Chi_Minh date +%d%m%Y)
+
 # Tạo tệp changelog.txt trong gói ROM zip
 if [ -f "$work_dir/bin/ddevice/changelog.txt" ] && [ -s "$work_dir/bin/ddevice/changelog.txt" ]; then
     cp -f "$work_dir/bin/ddevice/changelog.txt" "$target_out_dir/changelog.txt"
@@ -109,7 +115,7 @@ fi
 repack "Done"
 
 # Định dạng tên file: BugOS_<codename>_<phiên bản os>_<ngày tháng năm>.zip
-build_date=$(TZ=Asia/Ho_Chi_Minh date +%d%m%Y)
+# build_date đã gán ở trên (trước phần changelog) - không gán lại.
 final_zip_name="BugOS_${device_code}_${base_rom_code}_${build_date}.zip"
 
 find "$target_out_dir" | xargs touch
